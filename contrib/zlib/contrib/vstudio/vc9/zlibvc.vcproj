@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="Windows-1252"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="9,00"
+	Version="9.00"
 	Name="zlibvc"
 	ProjectGUID="{8FD826F8-3739-44E6-8CC8-997122E53B8D}"
 	RootNamespace="zlibvc"
@@ -26,7 +26,7 @@
 			OutputDirectory="x86\ZlibDll$(ConfigurationName)"
 			IntermediateDirectory="x86\ZlibDll$(ConfigurationName)\Tmp"
 			ConfigurationType="2"
-			InheritedPropertySheets="UpgradeFromVC70.vsprops"
+			InheritedPropertySheets="..\..\..\..\..\..\..\..\..\..\..\Program Files (x86)\Microsoft Visual Studio 9.0\VC\VCProjectDefaults\UpgradeFromVC70.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
 			>
@@ -82,19 +82,220 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/MACHINE:I386"
 				AdditionalDependencies="..\..\masmx86\match686.obj ..\..\masmx86\inffas32.obj"
-				OutputFile="$(OutDir)\zlibwapi.dll"
+				OutputFile="$(OutDir)\zlib.dll"
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
 				GenerateManifest="false"
 				ModuleDefinitionFile=".\zlibvc.def"
 				GenerateDebugInformation="true"
-				ProgramDatabaseFile="$(OutDir)/zlibwapi.pdb"
+				ProgramDatabaseFile="$(OutDir)\zlib.pdb"
 				GenerateMapFile="true"
-				MapFileName="$(OutDir)/zlibwapi.map"
+				MapFileName="$(OutDir)\zlib.map"
 				SubSystem="2"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
-				ImportLibrary="$(OutDir)/zlibwapi.lib"
+				ImportLibrary="$(OutDir)\zlib.lib"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="ReleaseWithoutAsm|Win32"
+			OutputDirectory="x86\ZlibDll$(ConfigurationName)"
+			IntermediateDirectory="x86\ZlibDll$(ConfigurationName)\Tmp"
+			ConfigurationType="2"
+			InheritedPropertySheets="..\..\..\..\..\..\..\..\..\..\..\Program Files (x86)\Microsoft Visual Studio 9.0\VC\VCProjectDefaults\UpgradeFromVC70.vsprops"
+			UseOfMFC="0"
+			ATLMinimizesCRunTimeLibraryUsage="false"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+				PreprocessorDefinitions="NDEBUG"
+				MkTypLibCompatible="true"
+				SuppressStartupBanner="true"
+				TargetEnvironment="1"
+				TypeLibraryName="$(OutDir)/zlibvc.tlb"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				InlineFunctionExpansion="1"
+				AdditionalIncludeDirectories="..\..\..;..\..\masmx86"
+				PreprocessorDefinitions="WIN32;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_WARNINGS;ZLIB_WINAPI"
+				StringPooling="true"
+				ExceptionHandling="0"
+				RuntimeLibrary="2"
+				BufferSecurityCheck="false"
+				EnableFunctionLevelLinking="true"
+				PrecompiledHeaderFile="$(IntDir)/zlibvc.pch"
+				AssemblerOutput="2"
+				AssemblerListingLocation="$(IntDir)\"
+				ObjectFile="$(IntDir)\"
+				ProgramDataBaseFileName="$(OutDir)\"
+				BrowseInformation="0"
+				WarningLevel="3"
+				SuppressStartupBanner="true"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+				PreprocessorDefinitions="NDEBUG"
+				Culture="1036"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalOptions="/MACHINE:I386"
+				OutputFile="$(OutDir)\zlib.dll"
+				LinkIncremental="1"
+				SuppressStartupBanner="true"
+				GenerateManifest="false"
+				IgnoreAllDefaultLibraries="false"
+				ModuleDefinitionFile=".\zlibvc.def"
+				ProgramDatabaseFile="$(OutDir)\zlib.pdb"
+				GenerateMapFile="true"
+				MapFileName="$(OutDir)\zlib.map"
+				SubSystem="2"
+				OptimizeForWindows98="1"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
+				ImportLibrary="$(OutDir)\zlib.lib"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="Release|Win32"
+			OutputDirectory="x86\ZlibDll$(ConfigurationName)"
+			IntermediateDirectory="x86\ZlibDll$(ConfigurationName)\Tmp"
+			ConfigurationType="2"
+			InheritedPropertySheets="..\..\..\..\..\..\..\..\..\..\..\Program Files (x86)\Microsoft Visual Studio 9.0\VC\VCProjectDefaults\UpgradeFromVC70.vsprops"
+			UseOfMFC="0"
+			ATLMinimizesCRunTimeLibraryUsage="false"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+				PreprocessorDefinitions="NDEBUG"
+				MkTypLibCompatible="true"
+				SuppressStartupBanner="true"
+				TargetEnvironment="1"
+				TypeLibraryName="$(OutDir)/zlibvc.tlb"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				InlineFunctionExpansion="1"
+				AdditionalIncludeDirectories="..\..\..;..\..\masmx86"
+				PreprocessorDefinitions="WIN32;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_WARNINGS;ZLIB_WINAPI;ASMV;ASMINF"
+				StringPooling="true"
+				ExceptionHandling="0"
+				RuntimeLibrary="0"
+				BufferSecurityCheck="false"
+				EnableFunctionLevelLinking="true"
+				PrecompiledHeaderFile="$(IntDir)/zlibvc.pch"
+				AssemblerOutput="2"
+				AssemblerListingLocation="$(IntDir)\"
+				ObjectFile="$(IntDir)\"
+				ProgramDataBaseFileName="$(OutDir)\"
+				BrowseInformation="0"
+				WarningLevel="3"
+				SuppressStartupBanner="true"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+				PreprocessorDefinitions="NDEBUG"
+				Culture="1036"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalOptions="/MACHINE:I386"
+				AdditionalDependencies="..\..\masmx86\match686.obj ..\..\masmx86\inffas32.obj "
+				OutputFile="$(OutDir)\zlib.dll"
+				LinkIncremental="1"
+				SuppressStartupBanner="true"
+				GenerateManifest="false"
+				IgnoreAllDefaultLibraries="false"
+				ModuleDefinitionFile=".\zlibvc.def"
+				ProgramDatabaseFile="$(OutDir)\zlib.pdb"
+				GenerateMapFile="true"
+				MapFileName="$(OutDir)\zlib.map"
+				SubSystem="2"
+				OptimizeForWindows98="1"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
+				ImportLibrary="$(OutDir)\zlib.lib"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -308,106 +509,6 @@
 			/>
 		</Configuration>
 		<Configuration
-			Name="ReleaseWithoutAsm|Win32"
-			OutputDirectory="x86\ZlibDll$(ConfigurationName)"
-			IntermediateDirectory="x86\ZlibDll$(ConfigurationName)\Tmp"
-			ConfigurationType="2"
-			InheritedPropertySheets="UpgradeFromVC70.vsprops"
-			UseOfMFC="0"
-			ATLMinimizesCRunTimeLibraryUsage="false"
-			WholeProgramOptimization="1"
-			>
-			<Tool
-				Name="VCPreBuildEventTool"
-			/>
-			<Tool
-				Name="VCCustomBuildTool"
-			/>
-			<Tool
-				Name="VCXMLDataGeneratorTool"
-			/>
-			<Tool
-				Name="VCWebServiceProxyGeneratorTool"
-			/>
-			<Tool
-				Name="VCMIDLTool"
-				PreprocessorDefinitions="NDEBUG"
-				MkTypLibCompatible="true"
-				SuppressStartupBanner="true"
-				TargetEnvironment="1"
-				TypeLibraryName="$(OutDir)/zlibvc.tlb"
-			/>
-			<Tool
-				Name="VCCLCompilerTool"
-				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="..\..\..;..\..\masmx86"
-				PreprocessorDefinitions="WIN32;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_WARNINGS;ZLIB_WINAPI"
-				StringPooling="true"
-				ExceptionHandling="0"
-				RuntimeLibrary="2"
-				BufferSecurityCheck="false"
-				EnableFunctionLevelLinking="true"
-				PrecompiledHeaderFile="$(IntDir)/zlibvc.pch"
-				AssemblerOutput="2"
-				AssemblerListingLocation="$(IntDir)\"
-				ObjectFile="$(IntDir)\"
-				ProgramDataBaseFileName="$(OutDir)\"
-				BrowseInformation="0"
-				WarningLevel="3"
-				SuppressStartupBanner="true"
-			/>
-			<Tool
-				Name="VCManagedResourceCompilerTool"
-			/>
-			<Tool
-				Name="VCResourceCompilerTool"
-				PreprocessorDefinitions="NDEBUG"
-				Culture="1036"
-			/>
-			<Tool
-				Name="VCPreLinkEventTool"
-			/>
-			<Tool
-				Name="VCLinkerTool"
-				AdditionalOptions="/MACHINE:I386"
-				OutputFile="$(OutDir)\zlibwapi.dll"
-				LinkIncremental="1"
-				SuppressStartupBanner="true"
-				GenerateManifest="false"
-				IgnoreAllDefaultLibraries="false"
-				ModuleDefinitionFile=".\zlibvc.def"
-				ProgramDatabaseFile="$(OutDir)/zlibwapi.pdb"
-				GenerateMapFile="true"
-				MapFileName="$(OutDir)/zlibwapi.map"
-				SubSystem="2"
-				OptimizeForWindows98="1"
-				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
-				ImportLibrary="$(OutDir)/zlibwapi.lib"
-			/>
-			<Tool
-				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
-			/>
-			<Tool
-				Name="VCXDCMakeTool"
-			/>
-			<Tool
-				Name="VCBscMakeTool"
-			/>
-			<Tool
-				Name="VCFxCopTool"
-			/>
-			<Tool
-				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCPostBuildEventTool"
-			/>
-		</Configuration>
-		<Configuration
 			Name="ReleaseWithoutAsm|x64"
 			OutputDirectory="x64\ZlibDll$(ConfigurationName)"
 			IntermediateDirectory="x64\ZlibDll$(ConfigurationName)\Tmp"
@@ -580,107 +681,6 @@
 				OptimizeForWindows98="1"
 				ImportLibrary="$(OutDir)/zlibwapi.lib"
 				TargetMachine="5"
-			/>
-			<Tool
-				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
-			/>
-			<Tool
-				Name="VCXDCMakeTool"
-			/>
-			<Tool
-				Name="VCBscMakeTool"
-			/>
-			<Tool
-				Name="VCFxCopTool"
-			/>
-			<Tool
-				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCPostBuildEventTool"
-			/>
-		</Configuration>
-		<Configuration
-			Name="Release|Win32"
-			OutputDirectory="x86\ZlibDll$(ConfigurationName)"
-			IntermediateDirectory="x86\ZlibDll$(ConfigurationName)\Tmp"
-			ConfigurationType="2"
-			InheritedPropertySheets="UpgradeFromVC70.vsprops"
-			UseOfMFC="0"
-			ATLMinimizesCRunTimeLibraryUsage="false"
-			WholeProgramOptimization="1"
-			>
-			<Tool
-				Name="VCPreBuildEventTool"
-			/>
-			<Tool
-				Name="VCCustomBuildTool"
-			/>
-			<Tool
-				Name="VCXMLDataGeneratorTool"
-			/>
-			<Tool
-				Name="VCWebServiceProxyGeneratorTool"
-			/>
-			<Tool
-				Name="VCMIDLTool"
-				PreprocessorDefinitions="NDEBUG"
-				MkTypLibCompatible="true"
-				SuppressStartupBanner="true"
-				TargetEnvironment="1"
-				TypeLibraryName="$(OutDir)/zlibvc.tlb"
-			/>
-			<Tool
-				Name="VCCLCompilerTool"
-				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="..\..\..;..\..\masmx86"
-				PreprocessorDefinitions="WIN32;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_WARNINGS;ZLIB_WINAPI;ASMV;ASMINF"
-				StringPooling="true"
-				ExceptionHandling="0"
-				RuntimeLibrary="0"
-				BufferSecurityCheck="false"
-				EnableFunctionLevelLinking="true"
-				PrecompiledHeaderFile="$(IntDir)/zlibvc.pch"
-				AssemblerOutput="2"
-				AssemblerListingLocation="$(IntDir)\"
-				ObjectFile="$(IntDir)\"
-				ProgramDataBaseFileName="$(OutDir)\"
-				BrowseInformation="0"
-				WarningLevel="3"
-				SuppressStartupBanner="true"
-			/>
-			<Tool
-				Name="VCManagedResourceCompilerTool"
-			/>
-			<Tool
-				Name="VCResourceCompilerTool"
-				PreprocessorDefinitions="NDEBUG"
-				Culture="1036"
-			/>
-			<Tool
-				Name="VCPreLinkEventTool"
-			/>
-			<Tool
-				Name="VCLinkerTool"
-				AdditionalOptions="/MACHINE:I386"
-				AdditionalDependencies="..\..\masmx86\match686.obj ..\..\masmx86\inffas32.obj "
-				OutputFile="$(OutDir)\zlibwapi.dll"
-				LinkIncremental="1"
-				SuppressStartupBanner="true"
-				GenerateManifest="false"
-				IgnoreAllDefaultLibraries="false"
-				ModuleDefinitionFile=".\zlibvc.def"
-				ProgramDatabaseFile="$(OutDir)/zlibwapi.pdb"
-				GenerateMapFile="true"
-				MapFileName="$(OutDir)/zlibwapi.map"
-				SubSystem="2"
-				OptimizeForWindows98="1"
-				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
-				ImportLibrary="$(OutDir)/zlibwapi.lib"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -961,14 +961,6 @@
 					/>
 				</FileConfiguration>
 				<FileConfiguration
-					Name="Debug|Itanium"
-					ExcludedFromBuild="true"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
 					Name="ReleaseWithoutAsm|Win32"
 					ExcludedFromBuild="true"
 					>
@@ -977,7 +969,7 @@
 					/>
 				</FileConfiguration>
 				<FileConfiguration
-					Name="ReleaseWithoutAsm|Itanium"
+					Name="Release|Win32"
 					ExcludedFromBuild="true"
 					>
 					<Tool
@@ -985,7 +977,15 @@
 					/>
 				</FileConfiguration>
 				<FileConfiguration
-					Name="Release|Win32"
+					Name="Debug|Itanium"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="ReleaseWithoutAsm|Itanium"
 					ExcludedFromBuild="true"
 					>
 					<Tool
