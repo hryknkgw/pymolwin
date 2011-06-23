@@ -1,6 +1,6 @@
 #A* -------------------------------------------------------------------
 #B* This file contains source code for the PyMOL computer program
-#C* copyright 1998-2000 by Warren Lyford Delano of DeLano Scientific. 
+#C* Copyright (c) Schrodinger, LLC. 
 #D* -------------------------------------------------------------------
 #E* It is unlawful to modify or remove this copyright notice.
 #F* -------------------------------------------------------------------
@@ -8511,7 +8511,7 @@ sym_base = {
     '-y,-x,-z',
     '-z,-y,-x',
     '-x,-z,-y',
-    ) : ['R 3 2 :R', 'R 3 2:R'] ,
+    ) : ['R 3 2', 'R 3 2 :R', 'R 3 2:R'] ,
     (
     'x,y,z',
     'z,x,y',

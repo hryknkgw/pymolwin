@@ -84,6 +84,14 @@ Z* -------------------------------------------------------------------
 #include"PlugIOManager.h"
 #include"Seeker.h"
 
+/* refactor this out like the other commands */
+#include"ce_types.h"
+extern double** calcDM(pcePoint coords, int len);
+extern double** calcS(double** d1, double** d2, int lenA, int lenB, double winSize);
+extern pcePoint getCoords(PyObject *L, int length);
+/*extern pathCache findPath(double** S, double** dA, double** dB, int lenA, int lenB, int winSize, int& bufferSize);*/
+extern PyObject* findBest( pcePoint coordsA, pcePoint coordsB, pathCache paths, int bufferSize, int smaller, int winSize);
+
 #define tmpSele "_tmp"
 #define tmpSele1 "_tmp1"
 #define tmpSele2 "_tmp2"
@@ -4197,8 +4205,8 @@ static PyObject *CmdMem(PyObject * self, PyObject * args)
     API_HANDLE_ERROR;
   }
   if(ok) {
-#ifdef OV_JENARIX
-    ov_heap_dump(0);
+#ifdef OV_JX
+    jx_heap_dump(0);
 #else
     MemoryDebugDump();
     OVHeap_Dump(G->Context->heap, 0);
@@ -8490,6 +8498,95 @@ static PyObject *CmdGetCThreadingAPI(PyObject * self, PyObject * args)
   return result;
 }
 
+static PyObject *CmdCEAlign(PyObject *self, PyObject *args)
+{
+  PyMOLGlobals *G = NULL;
+  int ok = false;
+  const double windowSize = 8.0;
+  int i=0;
+  int lenA, lenB, smaller;
+  double **dmA ,**dmB, **S;
+  int bufferSize;
+  int *bInt;
+  PyObject *listA, *listB, *rVal;
+  pcePoint coordsA, coordsB;
+  pathCache paths;
+
+  ok = PyArg_ParseTuple(args, "OOO", &self, &listA, &listB);
+  if(ok) {
+    API_SETUP_PYMOL_GLOBALS;
+    ok = (G != NULL);
+  } else {
+    API_HANDLE_ERROR;
+  }
+  /* let Python know we made two lists */
+/*   Py_INCREF(listA); */
+/*   Py_INCREF(listB); */
+  /* handle empty selections (should probably do this in Python)  */
+  lenA = PyList_Size(listA);
+  if ( lenA < 1 ) {
+    printf("CEALIGN ERROR: First selection didn't have any atoms.  Please check your selection.\n");
+    /* let Python remove the lists */
+/*     Py_DECREF(listA); */
+/*     Py_DECREF(listB); */
+    return NULL;
+  }
+	
+  lenB = PyList_Size(listB);
+  if ( lenB < 1 ) {
+    printf("CEALIGN ERROR: Second selection didn't have any atoms.  Please check your selection.\n");
+    /* let Python remove the lists */
+  /*   Py_DECREF(listA); */
+/*     Py_DECREF(listB); */
+    return NULL;
+  }
+  smaller = lenA < lenB ? lenA : lenB;
+	
+  /* get the coodinates from the Python objects */
+  coordsA = (pcePoint) getCoords(listA, lenA);
+  coordsB = (pcePoint) getCoords(listB, lenB);
+	
+  /* calculate the distance matrix for each protein */
+  dmA = (double**) calcDM(coordsA, lenA);
+  dmB = (double**) calcDM(coordsB, lenB);
+	
+  /* calculate the CE Similarity matrix */
+  S = (double**) calcS(dmA, dmB, lenA, lenB, windowSize);
+	
+  /* find the best path through the CE Sim. matrix */
+  bufferSize = 0;
+  bInt = &bufferSize;
+  /* the following line HANGS PyMOL */
+  paths = (pathCache) findPath( S, dmA, dmB, lenA, lenB, (int) windowSize, bInt );
+	
+  /* Get the optimal superposition here... */
+  rVal = (PyObject*) findBest( coordsA, coordsB, paths, bufferSize, smaller, (int) windowSize );
+	
+  /* let Python remove the lists */
+/*   Py_DECREF(listA); */
+/*   Py_DECREF(listB); */
+	
+  /* release memory */
+  free(coordsA);
+  free(coordsB);
+	
+  /* distance matrices	 */
+  for ( i = 0; i < lenA; i++ )
+    free( dmA[i] );
+  free(dmA);
+	
+  for  ( i = 0; i < lenB; i++ )
+    free( dmB[i] );
+  free(dmB);
+	
+  /* similarity matrix */
+  for ( i = 0; i < lenA; i++ )
+    free( S[i] );
+  free(S);
+	
+  return rVal;
+}
+
 static PyMethodDef Cmd_methods[] = {
   {"_get_c_threading_api", CmdGetCThreadingAPI, METH_VARARGS},
   {"_set_scene_names", CmdSetSceneNames, METH_VARARGS},
@@ -8755,6 +8852,7 @@ static PyMethodDef Cmd_methods[] = {
   {"update", CmdUpdate, METH_VARARGS},
   {"window", CmdWindow, METH_VARARGS},
   {"zoom", CmdZoom, METH_VARARGS},
+  {"cealign", CmdCEAlign, METH_VARARGS},
   {NULL, NULL}                  /* sentinel */
 };
 

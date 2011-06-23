@@ -1563,17 +1563,17 @@ void PSetupEmbedded(PyMOLGlobals * G, int argc, char **argv)
         lpcbData = sizeof(OrthoLineType) - 1;
         r1 = RegOpenKeyEx(HKEY_CLASSES_ROOT,
 #ifdef PYMOL_EVAL
-			"Software\\DeLano Scientific\\PyMOL Eval\\PYMOL_PATH",
+			"Software\\PyMOL\\PyMOL Eval\\PYMOL_PATH",
 #else
-			"Software\\DeLano Scientific\\PyMOL\\PYMOL_PATH",
+			"Software\\PyMOL\\PyMOL\\PYMOL_PATH",
 #endif
                           0, KEY_EXECUTE, &phkResult);
         if(r1 != ERROR_SUCCESS) {
           r1 = RegOpenKeyEx(HKEY_CURRENT_USER,
 #ifdef PYMOL_EVAL
-			"Software\\DeLano Scientific\\PyMOL Eval\\PYMOL_PATH",
+			"Software\\PyMOL\\PyMOL Eval\\PYMOL_PATH",
 #else
-			"Software\\DeLano Scientific\\PyMOL\\PYMOL_PATH",
+			"Software\\PyMOL\\PyMOL\\PYMOL_PATH",
 #endif
                             0, KEY_EXECUTE, &phkResult);
         }

@@ -240,6 +240,7 @@ from wizarding import \
 #--------------------------------------------------------------------
 from fitting import \
       align,             \
+      alignto,		 \
       fit,               \
       super,             \
       rms,               \
@@ -247,6 +248,7 @@ from fitting import \
       intra_fit,         \
       intra_rms,         \
       intra_rms_cur,     \
+      cealign,          \
       pair_fit          
 
 #--------------------------------------------------------------------

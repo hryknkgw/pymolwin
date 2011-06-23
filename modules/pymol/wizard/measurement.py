@@ -9,24 +9,23 @@ sele_prefix = "_mw"
 sele_prefix_len = len(sele_prefix)
 
 indi_sele = "_indicate_mw"
-
 obj_prefix = "measure"
 
 class Measurement(Wizard):
-
-    cutoff = 3.5
-    
     def __init__(self,_self=cmd):
         Wizard.__init__(self,_self)
 
         self.cmd.unpick()
-        
+
+        self.cutoff = self.cmd.get_setting_float("neighbor_cutoff")
+        self.heavy_neighbor_cutoff = self.cmd.get_setting_float("heavy_neighbor_cutoff")
+        self.polar_neighbor_cutoff = self.cmd.get_setting_float("polar_neighbor_cutoff")
+
         self.status = 0 # 0 no atoms selections, 1 atom selected, 2 atoms selected, 3 atoms selected
         self.error = None
         self.object_name = None
 
         # mode selection subsystem
-
         self.mode = self.session.get('default_mode','pairs')
         self.modes = [
             'pairs',
@@ -35,6 +34,7 @@ class Measurement(Wizard):
             'polar',
             'heavy',
             'neigh',
+            'surf'
             ]
         
         self.mode_name = {
@@ -44,16 +44,30 @@ class Measurement(Wizard):
             'pairs':'Distances',
             'angle':'Angles',
             'dihed':'Dihedrals',
+            'surf' :'Surface Area'
             }
+        # users can now specify how they're finding neighbors
+        self.neighbor_modes = [
+            'same',
+            'other',
+            'enabled',
+            'all',
+            'in_object',
+            'in_selection'
+            ]
+        
+        self.neighbor_target = ""
 
         smm = []
         smm.append([ 2, 'Measurement Mode', '' ])
         for a in self.modes:
-            smm.append([ 1, self.mode_name[a], 'cmd.get_wizard().set_mode("'+a+'")'])
+            if a in ("neigh", "polar", "heavy"):
+                smm.append([ 1, self.mode_name[a], self.neighbor_submenu(a)])
+            else:
+                smm.append([ 1, self.mode_name[a], 'cmd.get_wizard().set_mode("'+a+'")'])
         self.menu['mode']=smm
 
         # overwrite mode selection subsystem
-        
         self.object_mode = self.session.get('default_object_mode','append')
         self.object_modes = [
             'merge', 
@@ -70,10 +84,52 @@ class Measurement(Wizard):
         smm.append([ 2, 'New Measurements?', '' ])
         for a in self.object_modes:
             smm.append([ 1, self.object_mode_name[a], 'cmd.get_wizard().set_object_mode("'+a+'")'])
+
         self.menu['object_mode']=smm
+        # initially select atoms, but now users can change this
         self.selection_mode = self.cmd.get_setting_legacy("mouse_selection_mode")
         self.cmd.set("mouse_selection_mode",0) # set selection mode to atomic
         self.cmd.deselect() # disable the active selection (if any)
+        self.mouse_mode = 0
+
+    def get_event_mask(self):
+        """
+        Sets what this Wizard listens for.  event_mask_dirty is too coarse an event,
+        so we should consider something more fine grain for mouse mode updates
+        """
+        return Wizard.event_mask_pick + Wizard.event_mask_select + Wizard.event_mask_dirty
+
+    def neighbor_objects(self,a):
+        """
+        for neighbor selecting, populate the menu with these names
+        """
+        list = self.cmd.get_names("public_objects",1)[0:25] # keep this practical
+        list = filter(lambda x:self.cmd.get_type(x)=="object:molecule",list)
+        result = [[ 2, 'Object: ', '']]
+        for b in list:
+            result.append( [ 1, b,  'cmd.get_wizard().set_neighbor_target("%s","%s")' % (a,b)])
+        return result
+        
+    def neighbor_selections(self,a):
+        """
+        get list of public selections for populating the menu
+        """
+        list = self.cmd.get_names("public_selections",1)[0:25] # keep this practical
+        list = filter(lambda x:self.cmd.get_type(x)=="selection",list)
+        result = [[ 2, 'Selections: ', '']]
+        for b in list:
+            result.append( [ 1, b,  'cmd.get_wizard().set_neighbor_target("%s","%s")' % (a,b)])
+        return result
+
+    def neighbor_submenu(self,a,_self=cmd):
+        return [ [2, self.mode_name[a]+": ", ''],
+                 [1, "in same molecule",  'cmd.get_wizard().set_neighbor_target("'+a+'", "same")'],
+                 [1, "in other molecules",  'cmd.get_wizard().set_neighbor_target("'+a+'","other")'],
+                 [1, "in enabled molecules",  'cmd.get_wizard().set_neighbor_target("'+a+'","enabled")'],
+                 [1, "in all molecules",  'cmd.get_wizard().set_neighbor_target("'+a+'","all")'],
+                 [1, "in object", self.neighbor_objects(a) ],               # while this is a submenu this is also a command, so [1, ...]
+                 [1, "in selection", self.neighbor_selections(a) ],         # not [2, ...]
+            ]
 
     def _validate_instance(self):
         Wizard._validate_instance(self)
@@ -81,6 +137,9 @@ class Measurement(Wizard):
             self.meas_count = self.session.get('meas_count',0)            
             
     def get_name(self,untaken=1,increment=1):
+        """
+        get a name for the next measurement object
+        """
         self._validate_instance()
         if increment or self.meas_count<1:
             self.meas_count = self.meas_count + 1
@@ -96,9 +155,23 @@ class Measurement(Wizard):
     
 # generic set routines
 
+    def set_neighbor_target(self,mode,target):
+        """
+        sets the neighbor target in the menu
+        """
+        self.set_mode(mode)
+        self.neighbor_target=target
+        self.status = 0
+        self.clear_input()
+        self.cmd.refresh_wizard()
+        
     def set_mode(self,mode):
+        """
+        sets what we're measuring, distance, angle, dihedral, etc.
+        """
         if mode in self.modes:
             self.mode = mode
+        # if setting mode, we're restarting the selection process
         self.status = 0
         self.clear_input()
         self.cmd.refresh_wizard()
@@ -111,8 +184,6 @@ class Measurement(Wizard):
 
         
     def get_panel(self):
-        if int(self.cmd.get("mouse_selection_mode")!=0):
-            self.cmd.set("mouse_selection_mode",0)
         return [
             [ 1, 'Measurement',''],
             [ 3, self.mode_name[self.mode],'mode'],
@@ -123,34 +194,70 @@ class Measurement(Wizard):
             ]
 
     def cleanup(self):
+        """
+        restore user session how we found it
+        """
         self.session['default_mode'] = self.mode
         self.session['default_object_mode'] = self.object_mode
         self.clear_input()
         self.cmd.set("mouse_selection_mode",self.selection_mode) # restore selection mode
         
     def clear_input(self):
+        """
+        delete our user selections for this wizard
+        """
         self.cmd.delete(sele_prefix+"*") 
         self.cmd.delete(indi_sele)
+        self.cmd.delete("pk1")
         self.status = 0
+
+    def get_selection_name(self):
+        """
+        Return a textual description of the mouse mode
+        """
+        if self.cmd.get("mouse_selection_mode",   quiet=1)=="0":
+            return ("atom","")
+        elif self.cmd.get("mouse_selection_mode", quiet=1)=="1":
+            return ("residue"," br. ")
+        elif self.cmd.get("mouse_selection_mode", quiet=1)=="2":
+            return ("chain", " bc. ")
+        elif self.cmd.get("mouse_selection_mode", quiet=1)=="3":
+            return ("segment", " bs. ")
+        elif self.cmd.get("mouse_selection_mode", quiet=1)=="4":
+            return ("object", " bo. ")
+        elif self.cmd.get("mouse_selection_mode", quiet=1)=="5":
+            return ("molecule", " bm. ")
+        elif self.cmd.get("mouse_selection_mode", quiet=1)=="6":
+            return ("C-alpha", " bca. ")
         
     def get_prompt(self):
+        (what, code) = self.get_selection_name()
         self.prompt = None
         if self.mode in ['pairs', 'angle', 'dihed' ]:
             if self.status==0:
-                self.prompt = [ 'Please click on the first atom...']
+                self.prompt = [ 'Please click on the first %s...' % what]
             elif self.status==1:
-                self.prompt = [ 'Please click on the second atom...' ]
+                self.prompt = [ 'Please click on the second %s...' % what ]
             elif self.status==2:
-                self.prompt = [ 'Please click on the third atom...' ]
+                self.prompt = [ 'Please click on the third %s...' % what]
             elif self.status==3:
-                self.prompt = [ 'Please click on the fourth atom...' ]
-        elif self.mode in [ 'polar', 'neigh', 'heavy' ]:
-            self.prompt = [ 'Please click an atom...']
+                self.prompt = [ 'Please click on the fourth %s...' % what]
+        elif self.mode in [ 'polar', 'neigh', 'heavy', 'surf' ]:
+            (what, code) = self.get_selection_name()
+            letterN=""
+            if what[0] in ('a', 'e', 'i', 'o', 'u'):
+                letterN = "n"
+            else:
+                letterN = ""
+            self.prompt = [ 'Please click a%s %s...' % (letterN, what)]
         if self.error!=None:
             self.prompt.append(self.error)
         return self.prompt
     
     def delete_last(self):
+        """
+        Corresponds to the "Delete Last Object" menu button
+        """
         self._validate_instance()
         if self.status==0:
             if self.meas_count>0:
@@ -163,7 +270,9 @@ class Measurement(Wizard):
         self.cmd.refresh_wizard()
 
     def delete_all(self):
-        
+        """
+        Corresponds to the "Delete All Measurements" menu button
+        """
         self.meas_count = 0
         self.cmd.delete(obj_prefix+"*")
         self.status=0
@@ -174,7 +283,7 @@ class Measurement(Wizard):
     def do_select(self,name): # map selects into picks
         self.cmd.unpick()
         try:
-            self.cmd.edit(name + " and not " + sele_prefix + "*") # note, using new object name wildcards
+            self.cmd.select("pk1", name + " and not " + sele_prefix + "*") # note, using new object name wildcards
             self.cmd.delete(name)
             self.do_pick(0)
         except pymol.CmdException:
@@ -184,13 +293,31 @@ class Measurement(Wizard):
                 self.cmd.enable(indi_sele)
 
     def do_pick(self,bondFlag):
+        # update pk1 based on current mouse mode
+        (what,code) = self.get_selection_name()
+        self.cmd.select( "(pk1)", code + "(pk1)")
         if bondFlag:
             self.error = "Error: please select an atom, not a bond."
             print self.error
         else:
             reset = 1
             sele_name = sele_prefix + str(self.status)
-            if self.mode == 'pairs':
+            if self.mode == "surf":
+                the_area = cmd.get_area("(pk1)", quiet=1)
+                ## self.cmd.wizard("message",
+                ##                 [ "Surface Area = %.3f A^2" % the_area),
+                ##                   "Please press Dismiss to close this message." ] )
+                obj_name = self.get_name( (self.object_mode=="append"),
+                                          (self.object_mode=="append"))
+                if self.object_mode=='merge':
+                    reset=0
+                self.cmd.pseudoatom( obj_name, pos=self.cmd.get_atom_coords("first (pk1)"), quiet=1)
+                self.cmd.hide("nonbonded", obj_name)
+                self.cmd.label(obj_name, "'Surface Area = %.3f A^2'" % the_area)
+                self.cmd.enable(obj_name)
+                self.clear_input()
+                self.cmd.refresh_wizard()
+            elif self.mode == 'pairs':
                 if self.status==0:
                     self.cmd.select(sele_name,"(pk1)")
                     self.cmd.select(indi_sele, sele_name)
@@ -252,23 +379,45 @@ class Measurement(Wizard):
                 if self.object_mode=='merge':
                     reset = 0
                 cnt = 0
+                sel_mod = ""
+                if self.mode in ('neigh', 'polar', 'heavy'):
+                    if self.neighbor_target=="same":
+                        sel_mod = "bm. pk1"
+                    elif self.neighbor_target=="other":
+                        sel_mod = "(not bm. pk1)"
+                    elif self.neighbor_target=="enabled":
+                        sel_mod = "(enabled)"
+                    elif self.neighbor_target=="all":
+                        sel_mod = "all"
+                    else:
+                        sel_mod = "(%s)" % self.neighbor_target
+
+                cutoffType=0
                 if self.mode == 'neigh':
                     cnt = self.cmd.select(sele_prefix,
-"(v. and (pk1 a; %f) and (not (nbr. pk1)) and (not (nbr. (nbr. pk1))) and (not (nbr. (nbr. (nbr. pk1)))))"
-                                          %self.__class__.cutoff)
+"(v. and (pk1 a; %f) and (not (nbr. pk1)) and (not (nbr. (nbr. pk1))) and (not (nbr. (nbr. (nbr. pk1)))) and (%s))"
+                                          %(self.cutoff, sel_mod))
+                    cutoffType=self.cutoff
                 elif self.mode == 'polar':
                     cnt = self.cmd.select(sele_prefix,
-"(v. and (pk1 a; %f) and (e. n,o) and (not (nbr. pk1)) and (not (nbr. (nbr. pk1))) and (not (nbr. (nbr. (nbr. pk1)))))"
-                    %self.__class__.cutoff)            
+"(v. and (pk1 a; %f) and (e. n,o) and (not (nbr. pk1)) and (not (nbr. (nbr. pk1))) and (not (nbr. (nbr. (nbr. pk1)))) and (%s))"
+                    %(self.polar_neighbor_cutoff, sel_mod))
+                    cutoffType = self.polar_neighbor_cutoff
                 elif self.mode == 'heavy':
+                    cutoffType = self.heavy_neighbor_cutoff
                     cnt = self.cmd.select(sele_prefix,
-"(v. and (pk1 a; %f) and (not h.) and (not (nbr. pk1)) and (not (nbr. (nbr. pk1))) and (not (nbr. (nbr. (nbr. pk1)))))"
-                    %self.__class__.cutoff)            
+"(v. and (pk1 a; %f) and (not h.) and (not (nbr. pk1)) and (not (nbr. (nbr. pk1))) and (not (nbr. (nbr. (nbr. pk1)))) and (%s))"
+                    %(self.heavy_neighbor_cutoff, sel_mod))            
                 if cnt:
-                    self.cmd.dist(obj_name,"(pk1)",sele_prefix,reset=reset)
+                    self.cmd.dist(obj_name,"(pk1)",sele_prefix,cutoff=cutoffType,reset=reset)
                 else:
                     print " Wizard: No neighbors found."
                 self.clear_input()
                 self.cmd.unpick()
                 self.cmd.enable(obj_name)
         self.cmd.refresh_wizard()
+
+    def do_dirty(self):
+        if self.mouse_mode != self.cmd.get("mouse_selection_mode"):
+            self.mouse_mode = self.cmd.get("mouse_selection_mode")
+            self.cmd.refresh_wizard()

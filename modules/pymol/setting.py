@@ -1,6 +1,6 @@
 #A* -------------------------------------------------------------------
 #B* This file contains source code for the PyMOL computer program
-#C* copyright 1998-2000 by Warren Lyford Delano of DeLano Scientific. 
+#C* Copyright (c) Schrodinger, LLC. 
 #D* -------------------------------------------------------------------
 #E* It is unlawful to modify or remove this copyright notice.
 #F* -------------------------------------------------------------------
@@ -35,6 +35,7 @@ if __name__=='pymol.setting':
     
     class SettingIndex: # number, description, range, notes
         bonding_vdw_cutoff                 = 0
+
         min_mesh_spacing                   = 1
         dot_density                        = 2
         dot_mode                           = 3
@@ -669,6 +670,13 @@ if __name__=='pymol.setting':
         motion_hand                        = 631
         pdb_ignore_conect                  = 632
         editor_bond_cycle_mode             = 633
+        movie_quality                      = 634	# 0--100, controls movie.produce
+        label_anchor                       = 635	# 'CA' or 'CB' or any backbone atom name; bb atoms suggestged
+        fetch_host                         = 636        # one of, "pdb", "pdbe" or "pdbj"
+        dynamic_measures                   = 637        # do measurements update with atom movements?
+        neighbor_cutoff                    = 638	# see wizard/measurement.py
+        heavy_neighbor_cutoff              = 639	# see wizard/measurement.py
+        polar_neighbor_cutoff              = 640	# see wizard/measurement.py
         
     setting_sc = Shortcut(SettingIndex.__dict__.keys())
     

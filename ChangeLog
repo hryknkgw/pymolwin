@@ -2,6 +2,57 @@
 CHANGE LOG
 =========================================================================
 
+2010-08-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+	
+	* For r1.3r1 (mostly due to fetch command)
+
+	* filtering on File > Save Molecule
+
+	* Mouse modes now tracked on measurement wizard
+
+	* Measurement wizard has surface area (beta!)
+
+	* typos
+
+	* fixed and cleaned up the fetch command
+
+
+2010-05-28 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* dynamic_measures setting, for dynamic distances
+	
+	* more complete neighbor finding and concomitant settings:
+		- neighbor_cutoff
+		- polar_neighbor_cutoff
+		- heavy_neighbor cutoff
+
+	* versioning
+
+	* new (internal) build system
+
+
+2010-03-24 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed a cealign bug
+
+	* added 'alignto' command back in
+
+2010-03-24 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fetch_host setting (use 'pdb', 'pdbe', or 'pdbj')
+
+	* map fetching from EDS (eg. fetch 1cll, async=0; fetch 1cll, type=2fofc; fetch 1cll, type=fofc)
+
+2010-02-18 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* label_anchor setting
+
+2010-02-16 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* movie_quality setting
+
+	* copyright notices and install paths
+
 2009-06-14 Warren L. DeLano <warren@delsci.com>	
 
 	* motions 

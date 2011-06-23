@@ -1680,7 +1680,7 @@ static void SurfaceJobPurgeResult(PyMOLGlobals * G, SurfaceJob * I)
 }
 
 #ifndef _PYMOL_NOPY
-OV_INLINE_STATIC PyObject *SurfaceJobAtomInfoAsPyTuple(SurfaceJobAtomInfo * atom_info)
+OV_INLINE PyObject *SurfaceJobAtomInfoAsPyTuple(SurfaceJobAtomInfo * atom_info)
 {
   PyObject *result = NULL;
   if(atom_info) {
@@ -1699,7 +1699,7 @@ OV_INLINE_STATIC PyObject *SurfaceJobAtomInfoAsPyTuple(SurfaceJobAtomInfo * atom
   return (PConvAutoNone(result));
 }
 
-OV_INLINE_STATIC SurfaceJobAtomInfo *SurfaceJobAtomInfoVLAFromPyTuple(PyObject * tuple)
+OV_INLINE SurfaceJobAtomInfo *SurfaceJobAtomInfoVLAFromPyTuple(PyObject * tuple)
 {
   SurfaceJobAtomInfo *result = NULL;
   if(tuple && PyTuple_Check(tuple)) {
@@ -1724,9 +1724,9 @@ OV_INLINE_STATIC SurfaceJobAtomInfo *SurfaceJobAtomInfoVLAFromPyTuple(PyObject *
   return (result);
 }
 
-OV_INLINE_STATIC PyObject *SurfaceJobInputAsTuple(PyMOLGlobals * G, SurfaceJob * I)
+OV_INLINE PyObject *SurfaceJobInputAsTuple(PyMOLGlobals * G, SurfaceJob * I)
 {
-  PyObject *result = PyTuple_New(21);
+  PyObject *result = PyTuple_New(24);
   if(result) {
     PyTuple_SetItem(result, 0, PyString_FromString("SurfaceJob"));
     PyTuple_SetItem(result, 1, PyInt_FromLong(1));      /* version */
@@ -1758,7 +1758,7 @@ OV_INLINE_STATIC PyObject *SurfaceJobInputAsTuple(PyMOLGlobals * G, SurfaceJob *
   return result;
 }
 
-OV_INLINE_STATIC PyObject *SurfaceJobResultAsTuple(PyMOLGlobals * G, SurfaceJob * I)
+OV_INLINE PyObject *SurfaceJobResultAsTuple(PyMOLGlobals * G, SurfaceJob * I)
 {
   PyObject *result = PyTuple_New(6);
   if(result) {
@@ -1772,7 +1772,7 @@ OV_INLINE_STATIC PyObject *SurfaceJobResultAsTuple(PyMOLGlobals * G, SurfaceJob 
   return result;
 }
 
-OV_INLINE_STATIC ov_status SurfaceJobResultFromTuple(PyMOLGlobals * G,
+OV_INLINE ov_status SurfaceJobResultFromTuple(PyMOLGlobals * G,
                                                      SurfaceJob * I, PyObject * tuple)
 {
   ov_status status = OV_STATUS_FAILURE;
@@ -2976,7 +2976,6 @@ Rep *RepSurfaceNew(CoordSet * cs, int state)
               }
               if(PyErr_Occurred())
                 PyErr_Print();
-
               PAutoUnblock(G, blocked);
             }
 #endif

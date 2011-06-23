@@ -2,7 +2,7 @@
 /* 
    A* -------------------------------------------------------------------
    B* This file contains source code for the PyMOL computer program
-   C* copyright 1998-2000 by Warrn Lyford Delano of DeLano Scientific. 
+   C* Copyright (c) Schrodinger, LLC. 
    D* -------------------------------------------------------------------
    E* It is unlawful to modify or remove this copyright notice.
    F* -------------------------------------------------------------------
@@ -805,6 +805,13 @@ typedef struct _CPyMOL {
   ov_word lex_motion_hand;
   ov_word lex_pdb_ignore_conect;
   ov_word lex_editor_bond_cycle_mode;
+  ov_word lex_movie_quality;
+  ov_word lex_label_anchor;
+  ov_word lex_fetch_host;
+  ov_word lex_dynamic_measures;
+  ov_word lex_neighbor_cutoff;
+  ov_word lex_heavy_neighbor_cutoff;
+  ov_word lex_polar_neighbor_cutoff;
 } _CPyMOL;
 
 
@@ -1598,6 +1605,13 @@ static OVstatus PyMOL_InitAPI(CPyMOL * I)
   LEX_SETTING(motion_hand, 631);
   LEX_SETTING(pdb_ignore_conect, 632);
   LEX_SETTING(editor_bond_cycle_mode, 633);
+  LEX_SETTING(movie_quality, 634);
+  LEX_SETTING(label_anchor, 635);
+  LEX_SETTING(fetch_host, 636);
+  LEX_SETTING(dynamic_measures, 637);
+  LEX_SETTING(neighbor_cutoff, 638);
+  LEX_SETTING(heavy_neighbor_cutoff, 639);
+  LEX_SETTING(polar_neighbor_cutoff, 640);
   return_OVstatus_SUCCESS;
 }
 
@@ -1735,6 +1749,7 @@ PyMOLreturn_float_array PyMOL_CmdGetView(CPyMOL * I, int quiet)
   }
   PYMOL_API_UNLOCK return result;
 }
+
 
 PyMOLreturn_float_array PyMOL_CmdAlign(CPyMOL * I, char *source, char *target,
                                        float cutoff, int cycles, float gap, float extend,

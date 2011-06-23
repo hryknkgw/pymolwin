@@ -1,6 +1,6 @@
 #A* -------------------------------------------------------------------
 #B* This file contains source code for the PyMOL computer program
-#C* copyright 1998-2000 by Warren Lyford Delano of DeLano Scientific. 
+#C* Copyright (c) Schrodinger, LLC. 
 #D* -------------------------------------------------------------------
 #E* It is unlawful to modify or remove this copyright notice.
 #F* -------------------------------------------------------------------
@@ -556,6 +556,7 @@ SEE ALSO
             if not quiet:
                 print " Save: wrote \""+filename+"\"."
         elif format=='pse': # PyMOL session
+            filename = filename.replace("\\","/") # always use unix-like path separators	
             _self.set("session_file",filename,quiet=1)
             if '(' in input_selection: # ignore selections 
                 input_selection=''

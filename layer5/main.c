@@ -2,7 +2,7 @@
 /* 
    A* -------------------------------------------------------------------
    B* This file contains source code for the PyMOL computer program
-   C* copyright 1998-2000 by Warren Lyford Delano of DeLano Scientific. 
+   C* Copyright (c) Schrodinger, LLC. 
    D* -------------------------------------------------------------------
    E* It is unlawful to modify or remove this copyright notice.
    F* -------------------------------------------------------------------
@@ -320,7 +320,7 @@ static void DrawBlueLine(PyMOLGlobals * G)
 
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
 #ifdef _PYMOL_OSX
-    glDisable(GL_SHARED_TEXTURE_PALETTE_EXT);
+    //glDisable(GL_SHARED_TEXTURE_PALETTE_EXT);
     glDisable(GL_TEXTURE_1D);
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_TEXTURE_3D);
@@ -1262,7 +1262,9 @@ void MainFree(void)
   if(owned_options)
     PyMOLOptions_Free(owned_options);   /* clean up launch options if we're supposed to */
 
+#ifndef OV_JX
   MemoryDebugDump();            /* this is a no-op unless memory debugging is enabled */
+#endif
 
   if(show_message) {
     printf(" PyMOL: normal program termination.\n");

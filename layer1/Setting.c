@@ -3774,6 +3774,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_i(I, cSetting_sculpt_avd_excl, 7);
     set_b(I, cSetting_async_builds, 0);
     set_s(I, cSetting_fetch_path, ".");
+    set_s(I, cSetting_fetch_host, "pdb");
     set_f(I, cSetting_cartoon_ring_radius, -1.0F);
     set_b(I, cSetting_ray_color_ramps, 0);
     set_f(I, cSetting_ray_hint_camera, 2.15F);
@@ -3799,6 +3800,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_i(I, cSetting_label_distance_digits, -1);
     set_i(I, cSetting_label_angle_digits, -1);
     set_i(I, cSetting_label_dihedral_digits, -1);
+    set_s(I, cSetting_label_anchor, "CA");
     set_b(I, cSetting_surface_negative_visible, 0);
     set_color(I, cSetting_surface_negative_color, "grey50");
     set_b(I, cSetting_mesh_negative_visible, 0);
@@ -3889,6 +3891,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_b(I, cSetting_movie_auto_store, -1);
     set_b(I, cSetting_movie_auto_interpolate, 1);
     set_i(I, cSetting_movie_panel_row_height, 15);
+    set_i(I, cSetting_movie_quality, 60);
     set_i(I, cSetting_scene_frame_mode,-1);
     set_i(I, cSetting_surface_cavity_mode,0);
     set_f(I, cSetting_surface_cavity_radius, 7.0F);
@@ -3900,5 +3903,9 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_i(I, cSetting_motion_hand, 1);
     set_b(I, cSetting_pdb_ignore_conect, 0);
     set_b(I, cSetting_editor_bond_cycle_mode, 1); /* >0 -> include aromatic */
+    set_b(I, cSetting_dynamic_measures, 0);
+    set_f(I, cSetting_neighbor_cutoff, 3.5F);
+    set_f(I, cSetting_heavy_neighbor_cutoff, 3.5F);
+    set_f(I, cSetting_polar_neighbor_cutoff, 3.5F);
   }
 }

@@ -3,7 +3,7 @@
 /* 
 A* -------------------------------------------------------------------
 B* This file contains source code for the PyMOL computer program
-C* copyright 1998-2001 by Warren Lyford Delano of DeLano Scientific. 
+C* Copyright (c) Schrodinger, LLC. 
 D* -------------------------------------------------------------------
 E* It is unlawful to modify or remove this copyright notice.
 F* -------------------------------------------------------------------
@@ -131,12 +131,14 @@ CCrystal *CrystalCopy(CCrystal * other)
 
 void CrystalUpdate(CCrystal * I)
 {
-  float cabg[3];
-  float sabg[3];
+  float cabg[3]; /* Cosine of axis angle */
+  float sabg[3]; /* Singe of axis angle */
   float cabgs[3];
   float sabgs1;
   int i;
 
+	/* if we just cleared out the memory, but didn't init
+	 * then init the crystal and return */
   if(((I->Angle[0] == 0.0F) &&
       (I->Angle[1] == 0.0F) &&
       (I->Angle[2] == 0.0F)) ||

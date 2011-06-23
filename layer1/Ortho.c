@@ -1142,11 +1142,11 @@ int OrthoGrabbedBy(PyMOLGlobals * G, Block * block)
 void OrthoDoViewportWhenReleased(PyMOLGlobals *G)
 {
   register COrtho *I = G->Ortho;
-  if(!(I->GrabbedBy||I->ClickedIn)) {
-    OrthoCommandIn(G, "viewport");
+  if(!(I->GrabbedBy||I->ClickedIn)) { /* no active UI element? */
+    OrthoCommandIn(G, "viewport"); /* then issue viewport refresh */
     OrthoDirty(G);
   } else {
-    I->IssueViewportWhenReleased = true;
+    I->IssueViewportWhenReleased = true; /* otherwise, defer */
   }
 }
 
@@ -1219,7 +1219,7 @@ float *OrthoGetOverlayColor(PyMOLGlobals * G)
 #ifdef PYMOL_COLL
 #include "OrthoCollMessage.h"
 #endif
-#ifdef _PYMOL_ACTIVEX_EVAL
+#ifdef AXPYMOL_EVAL
 #include "OrthoAxMessage.h"
 #endif
 
@@ -1517,7 +1517,7 @@ void OrthoDoDraw(PyMOLGlobals * G, int render_mode)
 #ifdef PYMOL_COLL
       OrthoDrawCollMessage(G);
 #endif
-#ifdef _PYMOL_ACTIVEX_EVAL
+#ifdef AXPYMOL_EVAL
       OrthoDrawAxMessage(G);
 #endif
 
@@ -2062,15 +2062,15 @@ void OrthoSplash(PyMOLGlobals * G)
 #include"OrthoIPSplash.h"
 #else
   if(G->Option->incentive_product) {
-#ifdef _PYMOL_ACTIVEX_EVAL
+#ifdef AXPYMOL_EVAL
     PRINTF
-      " AxPyMOL(TM) Evaluation Product - Copyright (C) 2009 DeLano Scientific LLC.\n \n"
+      " AxPyMOL(TM) Evaluation Product - Copyright (c) Schrodinger, LLC.\n \n"
       ENDF(G);
     PRINTF " This Executable Build integrates and extends Open-Source PyMOL " ENDF(G);
     PRINTF _PyMOL_VERSION ENDF(G);
     PRINTF ".\n" ENDF(G);
 #else
-    PRINTF " PyMOL(TM) Incentive Product - Copyright (C) 2009 DeLano Scientific LLC.\n \n"
+    PRINTF " PyMOL(TM) Incentive Product - Copyright (c) Schrodinger, LLC.\n \n"
       ENDF(G);
     PRINTF " This Executable Build integrates and extends Open-Source PyMOL " ENDF(G);
     PRINTF _PyMOL_VERSION ENDF(G);
@@ -2084,7 +2084,7 @@ void OrthoSplash(PyMOLGlobals * G)
     PRINTF " PyMOL(TM) Molecular Graphics System, Version " ENDF(G);
     PRINTF _PyMOL_VERSION ENDF(G);
     PRINTF ".\n" ENDF(G);
-    PRINTF " Copyright (C) 2009 by DeLano Scientific LLC.\n All Rights Reserved.\n \n"
+    PRINTF " Copyright (c) Schrodinger, LLC.\n All Rights Reserved.\n \n"
       ENDF(G);
 
     PRINTF "    Created by Warren L. DeLano, Ph.D. \n \n" ENDF(G);

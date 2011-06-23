@@ -1,7 +1,7 @@
 /* 
 A* -------------------------------------------------------------------
 B* This file contains source code for the PyMOL computer program
-C* copyright 1998-2000 by Warren Lyford Delano of DeLano Scientific. 
+C* Copyright (c) Schrodinger, LLC. 
 D* -------------------------------------------------------------------
 E* It is unlawful to modify or remove this copyright notice.
 F* -------------------------------------------------------------------
@@ -20,7 +20,7 @@ Z* -------------------------------------------------------------------
 #include"os_predef.h"
 #include"ov_port.h"
 
-#ifndef OV_JENARIX
+#ifndef OV_JX
 
 #include"MemoryDebug.h"
 #include"MemoryCache.h"
