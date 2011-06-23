@@ -473,7 +473,7 @@ SEE ALSO
     def _processPWG(fname,_self=cmd):
         r = DEFAULT_ERROR
         try:
-            from consortia.web.pymolhttpd import PymolHttpd
+            from web.pymolhttpd import PymolHttpd
             browser_flag = 0
             launch_flag = 0
             report_url = None
@@ -643,7 +643,8 @@ SEE ALSO
             if not len(str(type)):
                 fname_no_gz = gz_ext_re.sub("",filename) # strip gz
                 # determine file type if possible
-                if re.search("\.pdb$|\.pdb1$|\.ent$|\.p5m",fname_no_gz,re.I):
+#                if re.search("\.pdb$|\.pdb1$|\.ent$|\.p5m",fname_no_gz,re.I):
+                if re.search("\.pdb$|\.pdb\d+$|\.ent$|\.p5m",fname_no_gz,re.I):
                     ftype = loadable.pdb
                 elif re.search("\.mol$",fname_no_gz,re.I):
                     ftype = loadable.mol
@@ -1241,28 +1242,60 @@ PYMOL API
         import os
         import string
         import time
+        import re
 
-        # prepare for server insonsistency; each server gets its own config
+        # file types can be: fofc, 2fofc, pdb, pdb1, pdb2, pdb3, etc...
+        # bioType is the string representation of the type
+        # typeExt is the file name extension based on type
+        if type == 'fofc':
+            bioType = type
+            typeExt = '_fofc.omap'
+        elif type == '2fofc':
+            bioType = type
+            typeExt = '_2fofc.omap'
+        elif type == 'pdb':
+            bioType = type
+            typeExt = '.pdb'
+        elif type=='cif':
+            bioType=type
+            typeExt = '.sf'
+        elif re.search("^pdb\d+$", type) != None:
+            bioType = 'bio'
+            typeExt = re.search("^pdb\d+$", type).group()
+
+        # worldwide servers
         fetchHosts = {  "pdb"  : "ftp://ftp.wwpdb.org/pub/pdb/",
                         "pdbe" : "ftp://ftp.ebi.ac.uk/pub/databases/rcsb/pdb-remediated/", 
                         "pdbj" : "ftp://pdb.protein.osaka-u.ac.jp/pub/pdb/" }
-        # as of this editing, pdb/pdbe/pdbj all have common subpaths; prepare for when they dont...
+        
+        # paths to the PDBs on each server, by type
         hostPaths = { "pdb" :
-                      { "pdb1" : "data/biounit/coordinates/divided/",
-                        "pdb"  : "data/structures/divided/pdb/" },
+                      { "bio"  : "data/biounit/coordinates/divided/",
+                        "pdb"  : "data/structures/divided/pdb/",
+                        "cif"  : "data/structures/divided/structure_factors/",
+                        },
                       "pdbe" :
-                      { "pdb1" : "data/biounit/coordinates/divided/",
-                        "pdb"  : "data/structures/divided/pdb/" },
+                      { "bio"  : "data/biounit/coordinates/divided/",
+                        "pdb"  : "data/structures/divided/pdb/",
+                        "cif"  : "data/structures/divided/structure_factors/",
+                        },
                       "pdbj" :
-                      { "pdb1" : "data/biounit/coordinates/divided/",
-                        "pdb"  : "data/structures/divided/pdb/" }
+                      { "bio"  : "data/biounit/coordinates/divided/",
+                        "pdb"  : "data/structures/divided/pdb/",
+                        "cif"  : "data/structures/divided/structure_factors/",
+                        }
                     }
+
+        # portion of the link after the code
         hostPost = { "pdb" : { "pdb" : ".ent.gz",
-                               "pdb1": ".pdb1.gz" },
+                               "bio" : "."+typeExt+".gz",
+                               "cif" : "sf.ent.gz" },
                      "pdbe": { "pdb" : ".ent.gz",
-                               "pdb1": ".pdb1.gz" },
+                               "bio" : "."+typeExt+".gz",
+                               "cif" : "sf.ent.gz" },
                      "pdbj": { "pdb" : ".ent.gz",
-                               "pdb1": ".pdb1.gz" }
+                               "bio" : "."+typeExt+".gz",
+                               "cif" : "sf.ent.gz" }
                    }
 
         # users could set this to something nonsensical
@@ -1282,24 +1315,21 @@ PYMOL API
             else:
                 fname = string.lower(code)
                 
-            if type=="2fofc":
-                fname += ".omap"
+            if bioType in [ 'fofc', '2fofc', 'cif' ]:
+                fname += typeExt
                 if name in _self.get_names("objects"):  # if the PDB exists, don't over write it
-                    name = name + "_" + type
-            elif type=="fofc":
-                fname += "_diff.omap"
-                if name in _self.get_names("objects"):  # if the PDB exists, don't over write it
-                    name = name + "_" + type
+                    name = name + "_" + bioType
             else:
-                fname += "." + type
+                fname += typeExt
         elif is_string(file):
             fname = file
         elif file:
             fobj = file
             auto_close_file = 0
         if fname and not fobj:
+            # if the file's cached locally, use it
             if os.path.exists(fname):
-                if type in ("fofc", "2fofc"):
+                if bioType in ("fofc", "2fofc"):
                     return _self.load(fname,name,state,'brix',finish,discrete,quiet,
                                   multiplex,zoom)
                 else:                    
@@ -1311,25 +1341,27 @@ PYMOL API
         
         while (done == 0) and (tries<3): # try loading URL up to 3 times
             tries = tries + 1
-            if (type=='pdb') or (type=='pdb1'):
-                # pdb files are: pdb1XYZ whereas pdb1 files are 1XYZ.pdb1
+            if bioType in [ 'pdb', 'bio', 'cif' ]:
+                # pdb files are: pdb3XYZ whereas pdb1 files are 1XYZ.pdb3
                 prePDB = ''
                 if type=='pdb':
                     prePDB = 'pdb'
+                elif type=="cif":
+                    prePDB = 'r'
 
                 # eg, ftp://ftp.ebi.ac.uk/pub/databases/rcsb/pdb-remediated/data/structures/divided/pdb/
-                remotePre = fetchHosts[fetch_host] + hostPaths[fetch_host][type]
+                remotePre = fetchHosts[fetch_host] + hostPaths[fetch_host][bioType]
                 # eg, fo/pdb1foo
                 remoteCode = string.lower(code)[1:3] + "/" + prePDB + string.lower(code)
-                # eg, .pdb1.gz
-                remotePost = hostPost[fetch_host][type]
+                # eg, .pdb3.gz
+                remotePost = hostPost[fetch_host][bioType]
                 
                 try:
                     #print "remotePre: %s" % remotePre
                     #print "remoteCode: %s" % remoteCode
                     #print "remotePost: %s" % remotePost
                     url = remotePre + remoteCode + remotePost
-#                    print url
+                    #print url
                     
                     if url!=None:
                         filename = urllib.urlretrieve(url)[0]
@@ -1349,8 +1381,12 @@ PYMOL API
                                     fobj.flush()
                                     if auto_close_file:
                                         fobj.close()
-                                r = _self.read_pdbstr(pdb_str,name,state,finish,
-                                                      discrete,quiet,zoom,multiplex)
+                                if bioType=="cif":
+                                    if not quiet:
+                                        print "Downloaded CIF file '%s' to' '%s'." % (name,fname)
+                                else:
+                                    r = _self.read_pdbstr(pdb_str,name,state,finish,
+                                                          discrete,quiet,zoom,multiplex)
                                 done = 1
                             except IOError:
 #                                print traceback.print_exc()
@@ -1362,7 +1398,7 @@ PYMOL API
                             os.remove(filename)
                         except:
                             pass
-            elif type in ("fofc" ,"2fofc"):
+            elif bioType in ("fofc" ,"2fofc"):
             # for ED maps,
             # http://eds.bmc.uu.se/eds/dfs/cb/1cbs/1cbs.omap
             # http://eds.bmc.uu.se/eds/dfs/cb/1cbs/1cbs_diff.omap
@@ -1373,9 +1409,9 @@ PYMOL API
                 else:
                     url = "http://eds.bmc.uu.se/eds/dfs/" + remoteCode[1:3] + "/" + remoteCode + "/" + remoteCode
                     if type=="2fofc":
-                        url += "_diff.omap"
-                    else:  # default to fofc
                         url += ".omap"
+                    else:  # default to fofc
+                        url += "_diff.omap"
 
                 if url == None:
                     pass
@@ -1397,8 +1433,6 @@ PYMOL API
                                     if fname and not fobj:
                                         fobj = open(fname,'wb')
                                     if fobj:
-                                        #print "Wrote to fname: %s" % fname
-                                        #print "Name is: %s" % name
                                         fobj.write(map_str)
                                         fobj.flush()
                                         if auto_close_file:

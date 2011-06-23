@@ -2,6 +2,114 @@
 CHANGE LOG
 =========================================================================
 
+2011-04-01 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* PyMOL v1.4b1 -- adds volumes, glew, shaders, bug fixes, etc
+
+2011-02-03 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Added PyMOL Web Services API; for information run
+	  firefox pymol/modules/web/examples/index.html
+
+2011-01-18 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Cygwin build fix (thanks Alex)
+
+2011-01-18 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* mol2 atom types
+
+2011-01-11 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* mol2 multi-state save bugfix
+
+2011-01-11 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* added mol2.py
+	* File->Save Moleulce
+
+2011-01-11 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* nascent mol2 writing
+
+2011-01-11 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* removed duplicate function; thanks Thomas
+
+2011-01-03 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed multi-state ray trace bug for CGO objects
+
+2010-10-13 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed Glutamine label problem in Residue menu; now ALT-Q.
+
+2010-10-13 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Trajectory fix
+
+2010-10-08 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* charge wizard fix
+
+
+2010-10-06 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* memory fix on angles and dihedrals
+
+	* documentation update on cealign
+
+
+2010-10-02 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fully implemented dynamic measures; enable by turning on
+	"dynamic_measures"--disabled by default for testing
+
+	* Setting for surface residues
+
+
+2010-10-02 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Measurement wizard dihedral fix
+
+
+2010-09-23 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed degenerate super bug.
+
+
+2010-08-12 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed the map fetching, again.
+
+
+2010-08-12 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Added visibililty flag for Measurement Wizard
+
+
+2010-08-11 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed small bug with fetch.
+
+	* Moved surface area calculations to Compute > Surface area; these values still need to be validated!
+
+	* A > Action > Generate > Selection > Surface Residues
+
+	* New "surface_residue_cutoff" setting
+
+	* Removed one redundant option from Measurement wizard
+
+	* Added C > Color > Element > 6/H now colors by hydrogens, not carbons
+
+	* Yay for the new PyMOL website!
+
+
+2010-08-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Better support for biological units.
+
+
 2010-08-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
 	
 	* For r1.3r1 (mostly due to fetch command)

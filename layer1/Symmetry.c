@@ -209,5 +209,4 @@ void SymmetryUpdate(CSymmetry * I)
 
 void SymmetryDump(CSymmetry * I)
 {
-
 }

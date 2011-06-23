@@ -269,6 +269,18 @@ def slice_hide(self_cmd, sele):
               [ 1, 'slice'        , 'cmd.hide("slice","'+sele+'")'     ],
               ]
 
+def volume_show(self_cmd, sele):
+    return [[ 2, 'Show:'       , ''                             ],
+              [ 1, 'volume'       , 'cmd.show("volume","'+sele+'")'     ],
+              [ 1, 'extent'       , 'cmd.show("extent","'+sele+'")'     ],
+              ]
+
+def volume_hide(self_cmd, sele):
+    return [[ 2, 'Hide:'       , ''                             ],
+              [ 1, 'volume'        , 'cmd.hide("volume","'+sele+'")'     ],
+              [ 1, 'extent'        , 'cmd.hide("extent","'+sele+'")'     ],
+              ]
+
 def by_elem2(self_cmd, sele):
     return [
         [ 2, 'Atoms'     ,''                               ],
@@ -320,6 +332,19 @@ def by_elem5(self_cmd, sele):
 [1,'\\226C\\777H\\229N\\922O\\950S...','util.cba(23,"'+sele+'",_self=cmd)'],# deepblue
 [1,'\\632C\\777H\\229N\\922O\\950S...','util.cba(51,"'+sele+'",_self=cmd)'],# brown
               ]
+
+def by_elem6(self_cmd, sele):
+    return [
+        [ 2, 'Atoms'     ,''                               ],
+[1,'\\191C\\911H\\229N\\922O\\950S...','util.cbh("tv_red","'+sele+'",_self=cmd)'],# tv_red
+[1,'\\191C\\917H\\229N\\922O\\950S...','util.cbh("lightmagenta","'+sele+'",_self=cmd)'],# lightmagenta
+[1,'\\191C\\119H\\229N\\922O\\950S...','util.cbh("tv_blue","'+sele+'",_self=cmd)'],# tv_blue
+[1,'\\191C\\940H\\229N\\922O\\950S...','util.cbh("orange","'+sele+'",_self=cmd)'],# orange
+[1,'\\191C\\870H\\229N\\922O\\950S...','util.cbh("olive","'+sele+'",_self=cmd)'],# olive
+[1,'\\191C\\088H\\229N\\922O\\950S...','util.cbh("teal","'+sele+'",_self=cmd)'],# teal
+[1,'\\191C\\521H\\229N\\922O\\950S...','util.cbh("chocolate","'+sele+'",_self=cmd)'],# chocolate
+[1,'\\191C\\000H\\229N\\922O\\950S...','util.cbh("black","'+sele+'",_self=cmd)'],# black
+              ]
     
 def by_elem(self_cmd, sele):
     return [
@@ -338,6 +363,7 @@ def by_elem(self_cmd, sele):
         [ 1, 'set 3'     ,by_elem3(self_cmd, sele)                    ],
         [ 1, 'set 4'     ,by_elem4(self_cmd, sele)                    ],
         [ 1, 'set 5'     ,by_elem5(self_cmd, sele)                    ],      
+        [ 1, 'set 6/H'   ,by_elem6(self_cmd, sele)                    ],      
               ]
 
 def by_ss(self_cmd, sele):
@@ -528,6 +554,19 @@ def all_colors(self_cmd, sele):
     
         ]
 
+#def vol_color(self_cmd, sele):
+#    print "Be sure to finish the color_volume colorRamps"
+#    return [
+#        [2, 'Colors:',            ''],
+#        [1, 'High Focus',         'cmd.volume_color("'+sele+'","-1")' ],
+#        [1, 'Med. Focus',         'cmd.volume_color("'+sele+'","-2")' ],
+#        [1, 'Low  Focus',         'cmd.volume_color("'+sele+'","-3")' ],
+#        [1, 'Solvent Focus',      'cmd.volume_color("'+sele+'","-4")' ],
+#        [1, 'Ion Focus',          'cmd.volume_color("'+sele+'","-5")' ],
+#        ]
+
+
+
 def color_auto(self_cmd, sele):
     return [
         [ 2, 'Auto'     ,''                               ],
@@ -621,12 +660,17 @@ def masking(self_cmd, sele):
               ]
 
 def compute(self_cmd, sele):
-    return [[ 2, 'Compute:'       ,''                        ],     
-              [ 1, 'atom count'   ,'cmd.count_atoms("'+sele+'",quiet=0)'          ],
-              [ 0, ''               ,''                             ],           
-              [ 1, 'formal charge sum'   ,'util.sum_formal_charges("'+sele+'",quiet=0,_self=cmd)'          ],
-              [ 1, 'partial charges sum'   ,'util.sum_partial_charges("'+sele+'",quiet=0,_self=cmd)'          ],                      
-              ]
+    return [[ 2, 'Compute:', '' ],     
+            [ 1, 'atom count'   ,'cmd.count_atoms("'+sele+'",quiet=0)'          ],
+            [ 0, ''               ,''                             ],           
+            [ 1, 'formal charge sum'   ,'util.sum_formal_charges("'+sele+'",quiet=0,_self=cmd)'          ],
+            [ 1, 'partial charges sum'   ,'util.sum_partial_charges("'+sele+'",quiet=0,_self=cmd)'          ],
+             [ 1, 'surface area',
+               [[ 2, 'Surface Area Type:', ''],
+                [ 1, 'molecular', 'cmd.get_area("'+sele+'",quiet=0,_self=cmd)' ],
+                [ 1, 'solvent accessible', 'util.get_sasa(sele="'+sele+'",_self=cmd)' ],
+                ]],
+            ]
 
 def vacuum(self_cmd, sele):
     return [[ 2, 'Vacuum Electrostatics:'       ,''                        ],
@@ -665,6 +709,7 @@ def selection(self_cmd, sele):
               [ 1, 'polymer', 'cmd.select("'+sele+'_polymer","('+sele+') and polymer")'],
               [ 1, 'organic', 'cmd.select("'+sele+'_organic","('+sele+') and organic")'],
               [ 1, 'solvent', 'cmd.select("'+sele+'_solvent","('+sele+') and solvent")'],           
+              [ 1, 'surface residues', 'util.find_surface_residues(sele="'+sele+'", _self=cmd)' ],
               ]
 
 def mol_generate(self_cmd, sele):
@@ -715,8 +760,7 @@ def modify_by_sele(self_cmd, sele, op):
     result = [[ 2, 'Selection:', '']]
     for a in list:
         if a!=sele:
-            result.append([1,a,
-                                'cmd.select("'+sele+'","('+sele+') '+op+' ('+a+')",enable=1)'])
+            result.append([1,a, 'cmd.select("'+sele+'","('+sele+') '+op+' ('+a+')",enable=1)'])
     return result
 
 def restrict(self_cmd, sele):
@@ -1099,6 +1143,11 @@ def map_mesh(self_cmd, sele):
             [ 1, '@ level -3.0'         , 'cmd.isomesh("'+sele+'_mesh","'+sele+'",-3.0)'      ],
             ]
 
+def map_volume(self_cmd, sele):
+    return [[ 2, 'Volume:', ''],
+            [ 1, 'default'              , 'cmd.volume("'+sele+'_volume","'+sele+'",1.0)'  ]
+           ]
+
 def map_surface(self_cmd, sele):
     return [[ 2, 'Surface:',  '' ],
             [ 1, '@ level 1.0'         , 'cmd.isosurface("'+sele+'_surf","'+sele+'",1.0)'      ],
@@ -1132,6 +1181,7 @@ def map_action(self_cmd, sele):
             [ 1, 'surface'      , map_surface(self_cmd, sele)  ],
             [ 1, 'slice'        , map_slice(self_cmd, sele)  ],
             [ 1, 'gradient'     , map_gradient(self_cmd, sele)  ],                                    
+            [ 1, 'volume'       , map_volume(self_cmd, sele)  ],
             [ 0, ''             , ''                       ],
             [ 1, 'zoom'         , 'cmd.zoom("'+sele+'",animate=-1)'      ],
             [ 1, 'center'       , 'cmd.center("'+sele+'",animate=-1)'    ],           
@@ -1254,7 +1304,7 @@ def label_props(self_cmd, sele):
               [ 1, 'text type'      , 'cmd.label("'+sele+'","text_type")'    ],
               [ 1, 'numeric type'   , 'cmd.label("'+sele+'","numeric_type")' ],
               [ 0, ''               , ''                                  ],
-              [ 1, 'stereochemistry', 'cmd.label("'+sele+'","numeric_type")' ],  # -- TODO
+              [ 1, 'stereochemistry', 'cmd.label("'+sele+'","stereo")' ]
               ]
 
 def label_ids(self_cmd, sele):

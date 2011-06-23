@@ -18,6 +18,9 @@ from pmg_tk.ColorEditor import ColorEditor
 
 from pmg_tk.skins import PMGSkin
 from builder import Builder
+from volume import Volume
+
+import traceback
 
 def _darwin_browser_open(url):
     os.popen("open "+url,'r').read()
@@ -37,17 +40,33 @@ def _def_ext(ext): # platform-specific default extension handling
         ext = None # default extensions don't work right under X11/Tcl/Tk
     return ext
 
+def _wincheck():
+    # disable map_gen for v1.4 release; 
+    # map_gen will hit windows in v1.4r1
+    #return sys.platform not in ("win32", "cygwin")
+    return False
+
+
+## class askfileopenfilter(askopenfilename):
+##     """
+##     Subclasses open file dialog to include filename filtering
+##     """
+##     def __init__(self, initialdir = initdir, filetypes=ftypes, multiple=1):
+##         super(askfileopen, self).__init__( initialdir, filetypes, multiple=multiple)
+        
+
+
 class Normal(PMGSkin):
 
     pad = ' ' # extra space in menus
     
     appname        = 'The PyMOL Molecular Graphics System'
-    appversion     = '1.3'
-    copyright      = ('Copyright (C) 2003-2010 \n' +
+    appversion     = '1.4'
+    copyright      = ('Copyright (C) 2003-2011 \n' +
                       'Schrodinger LLC.\n'+
                       'All rights reserved.')
     contactweb     = 'http://www.pymol.org'
-    contactemail   = 'sales@pymol.org'
+    contactemail   = 'sales@schrodinger.com'
     
     # responsible for setup and takedown of the normal skin
 
@@ -158,8 +177,8 @@ class Normal(PMGSkin):
 
     def buttonAdd(self,frame,text,cmmd):
         newBtn=Button(frame,
-                          text=text,highlightthickness=0,
-                          command=cmmd,padx=0,pady=0)
+                      text=text,highlightthickness=0,
+                      command=cmmd,padx=0,pady=0)
         newBtn.pack(side=LEFT,fill=BOTH,expand=YES)
 
     def get_view(self):
@@ -218,6 +237,9 @@ class Normal(PMGSkin):
         self.buildB = self.buttonAdd(row4,'Builder',
                                               lambda s=self:
                                               s.toggleFrame(s.buildFrame))
+        self.volB = self.buttonAdd(row4, 'Volume',
+                                   lambda s=self:
+                                       s.toggleFrame(s.volFrame))
 #        btn_interrupt = self.buttonAdd(self.commandFrame,'Interrupt',lambda s=self: s.cmd.interrupt())
         
     def destroyButtonArea(self):
@@ -322,6 +344,7 @@ class Normal(PMGSkin):
 
         self.cmdFrame = Frame(self.dataArea)
         self.buildFrame = Builder(self.app, self.dataArea)
+        self.volFrame = Volume(self.app, self.dataArea)
         
         self.toggleFrame(self.cmdFrame,startup=1)
 
@@ -392,6 +415,7 @@ class Normal(PMGSkin):
         if self.app.allow_after:
             self.output.after(100,self.update_feedback)
             self.output.after(100,self.update_menus)
+            self.output.after(100,self.update_volume)
             
         self.output.pack(side=BOTTOM,expand=YES,fill=BOTH)
         self.app.bind(self.entry, 'Command Input Area')
@@ -519,13 +543,27 @@ class Normal(PMGSkin):
                 self.cmd.set("valence","1")
                 self.auto_overlay = self.cmd.get("auto_overlay")
                 self.cmd.set("auto_overlay",1)
+            elif frame == self.volFrame:
+                frame.deferred_activate()
             
     def update_menus(self):
         self.setting.refresh()
         if self.app.allow_after:
             self.output.after(500,self.update_menus) # twice a second
 
+    def update_volume(self):
+        if self.volFrame in self.dataArea.slaves():
+            if self.volFrame.update_is_needed():
+                self.volFrame.update_object_list()
+                self.volFrame.update_listbox()
+                self.volFrame.update_transferframe()                
+        if self.app.allow_after:
+            self.output.after(500,self.update_volume) 
+        
     def file_open(self,tutorial=0):
+        # FIXME: finish
+        REFLECTION_FORMATS = ( "MTZ", "mtz", "CIF", "cif" )
+        
         if not tutorial:
             initdir = self.initialdir
             ftypes = self.app.getLoadableFileTypes()
@@ -542,6 +580,11 @@ class Normal(PMGSkin):
         else:
             ofile_list = [ askopenfilename(initialdir = initdir,
                                          filetypes=ftypes) ]
+        # strange windows bugfix; askopenfiles returns
+        # the unicode unparsed tcl list, instead of a Python list
+        if ofile_list.__class__==u"".__class__:
+            ofile_list = self.app.root.tk.splitlist(ofile_list)
+
         for ofile in ofile_list:
             if len(ofile):
                 if not tutorial:
@@ -550,7 +593,18 @@ class Normal(PMGSkin):
                     self.cmd.log("load %s\n"%ofile,"cmd.load('%s',quiet=0)\n"%ofile)
                     if (string.lower(ofile[-4:])=='.pse') and (ofile!=self.save_file):
                         self.save_file = '' # remove ambiguous default
-                    self.cmd.load(ofile,quiet=0)
+                    if ofile[-3:] in REFLECTION_FORMATS and _wincheck():
+                        try:
+                            from pmg_tk import PyMOLMapLoad
+                            map_loader = PyMOLMapLoad.PyMOLMapLoad(self.app.root,self.app,ofile)
+                            map_loader.pack_and_show()
+                        except:
+                            print "Could not load reflection file."
+                            traceback.print_exc()
+                            return None
+                    else:
+                        self.cmd.load(ofile,quiet=0)
+                    
                 except self.pymol.CmdException:
                     print "Error: unable to open file '%s'"%ofile
 
@@ -669,6 +723,34 @@ class Normal(PMGSkin):
                                      label_text="Filter:")
         self.filter_entry.pack(pady=6, fill='x', expand=0, padx=10)
 
+        self.multiple_files_option = Pmw.RadioSelect( self.dialog.interior(),
+                                                      labelpos='w',
+                                                      orient='vertical',
+                                                      selectmode='single',
+                                                      label_text="Save to...",
+                                                      buttontype="radiobutton",
+                                                      )
+        self.multiple_files_option.add("one file")
+        self.multiple_files_option.add("multiple files")
+        self.multiple_files_option.invoke("one file")
+        self.multiple_files_option.pack(side='left', pady=8)
+                                                      
+                                                 
+        self.states_option = Pmw.RadioSelect( self.dialog.interior(),
+                                              labelpos='w',
+                                              orient='vertical',
+                                              selectmode='single',
+                                              label_text='Saved state...',
+                                              buttontype="radiobutton"
+                                              )
+        self.states_option.add("all")
+        self.states_option.add("global")
+        self.states_option.add("object's current")
+        self.states_option.invoke("global")
+        self.states_option.pack(side='right', pady=8)
+                                               
+                                                
+
         # The listbox is created empty.  Fill it now.
         self.update_save_listbox()
 
@@ -680,31 +762,126 @@ class Normal(PMGSkin):
         self.my_show(self.dialog)
         
     def file_save2(self,result):
+        # user hit [CANCEL] button
         if result!='OK':
             self.my_withdraw(self.dialog)
             del self.dialog
+        # user hit [OK] button
         else:
+            # saves multiple as one file
             sels = self.dialog.getcurselection()
-            if len(sels)!=0:
-                sfile = string.join(sels,"_") # +".pdb"
+
+            # save N>1 objects to ONE file
+            if self.multiple_files_option.getvalue()=="one file" and len(sels)>=1:
+                # save one or more objects to ONE file
+                if self.multiple_files_option.getvalue()=="one file":
+                    sfile = string.join(sels,"_") # +".pdb"
+                    self.my_withdraw(self.dialog)
+                    del self.dialog
+                    if result=='OK':
+                        sfile = asksaveasfilename(defaultextension = _def_ext(".pdb"),
+                                                  initialfile = sfile,
+                                                  initialdir = self.initialdir,
+                                                  filetypes=[
+                                                      ("PDB File","*.pdb"),
+                                                      ("MOL File","*.mol"),
+                                                      ("MOL2 File","*.mol2"),
+                                                      ("MMD File","*.mmd"),
+                                                      ("PKL File","*.pkl"),
+                                                      ])
+                        if len(sfile):
+                            # maybe use PDBSTRs for saving multiple files to multiple states
+                            self.initialdir = re.sub(r"[^\/\\]*$","",sfile)
+                            save_sele = string.join(map(lambda x:"("+str(x)+")",sels)," or ")
+                            self.cmd.log("save %s,(%s)\n"%(sfile,save_sele),
+                                         "cmd.save('%s','(%s)')\n"%(sfile,save_sele))
+			    if self.states_option.getvalue()=="all":
+                                self.cmd.save(sfile,"(%s)"%save_sele,state=0,quiet=0)
+			    else:
+                                self.cmd.save(sfile,"(%s)"%save_sele,quiet=0)
+                            return
+            else:
+                # save to many files
                 self.my_withdraw(self.dialog)
                 del self.dialog
-                if result=='OK':
-                    sfile = asksaveasfilename(defaultextension = _def_ext(".pdb"),
-                                              initialfile = sfile,
-                                              initialdir = self.initialdir,
-                                              filetypes=[
-                        ("PDB File","*.pdb"),
-                        ("MOL File","*.mol"),
-                        ("MMD File","*.mmd"),
-                        ("PKL File","*.pkl"),
-                        ])
-                    if len(sfile):
-                        self.initialdir = re.sub(r"[^\/\\]*$","",sfile)
-                        save_sele = string.join(map(lambda x:"("+str(x)+")",sels)," or ")
-                        self.cmd.log("save %s,(%s)\n"%(sfile,save_sele),
-                                  "cmd.save('%s','(%s)')\n"%(sfile,save_sele))
-                        self.cmd.save(sfile,"(%s)"%save_sele,quiet=0)
+
+                state_flag = self.states_option.getvalue()
+
+                for curName in sels:
+                    ## print "Result is: ", result
+                    ## print "Sels is: ", sels
+                    ## print "CurName is: ", curName
+                    ## print "State flag is: ", state_flag
+
+                    # The only special case for saving files is when the user selects a multi-state object
+                    # and wants to save that to multiple files, each state in one file.
+                    doSplit=False
+                    if state_flag=='all':
+                        stateSave = "0"
+                        if len(sels)==1:
+#                            print "User wants to split a file"
+                            doSplit=True
+                    elif state_flag=='global':
+                        stateSave = self.cmd.get_state()
+                    elif state_flag=="object's current":
+                        stateSave = int(self.cmd.get("state",curName))
+#                        print "Saving curren't object's state as: ", stateSave
+                    else: # default to current global
+                        stateSave = "state=", self.cmd.get_state()
+
+                    if result=='OK':
+                        sfile = asksaveasfilename(defaultextension = _def_ext(".pdb"),
+                                                  initialfile = curName,
+                                                  initialdir = self.initialdir,
+                                                  filetypes = [
+                                                      ("PDB File", "*.pdb"),
+                                                      ("MOL File","*.mol"),
+                                                      ("MOL2 File","*.mol2"),
+                                                      ("MMD File","*.mmd"),
+                                                      ("PKL File","*.pkl"),
+                                                      ])
+                        # now save the file (customizing states as necessary)
+#                        print "sfile is: ", sfile
+
+                        if len(sfile):
+                            # maybe use PDBSTRs for saving multiple files to multiple states
+                            self.initialdir = re.sub(r"[^\/\\]*$","",sfile)
+                            save_sele = str("("+curName+")")
+
+                            if doSplit:
+                                # save each state in "save_sele" to file "sfile" as 'sfile_stateXYZ.pdb'
+                                s = self.cmd.count_states(save_sele)
+#                                print "Nstates to save= %s" % s
+                                for stateSave in range(1,int(s)+1):
+                                    save_file = sfile
+                                    # _state004
+                                    inter = "_state" + string.zfill(str(stateSave), len(str(s))+1)
+#                                    print "inter: ", inter
+                                    # g either MATCHES *.pdb or not.  If so, save, name_stateXYZ.pdb
+                                    g = re.search("(.*)(\..*)$", save_file)
+                                    if g!=None:
+                                        # 1PDB_state004.pdb
+                                        save_file = g.groups()[0] + inter + g.groups()[1]
+#                                        print "g!=None: save_file=> %s" % save_file
+                                    else:
+                                        # user entered a file w/o an extension name: eg, '1abc'
+                                        # this saves to, '1abc_state00XYZ'
+                                        save_file = save_file + inter
+#                                        print "g==None: save_file=> %s" % save_file
+
+#                                    print "Saving to: %s in state %s" % (save_file, stateSave)
+
+                                    self.cmd.log("save %s,(%s)\n"%(save_file,save_sele),
+                                                 "cmd.save('%s','(%s)', state='%s')\n"%(save_file,save_sele,stateSave))
+                                    self.cmd.save(save_file,"(%s)"%save_sele,state=stateSave,quiet=0)
+                            else:
+                                save_file = sfile
+#                                print "Saving one state from one file."
+                                # just save current selection to one file
+                                self.cmd.log("save %s,(%s)\n"%(save_file,save_sele),
+                                             "cmd.save('%s','(%s)', state='%s')\n"%(save_file,save_sele,stateSave))
+                                self.cmd.save(save_file,"(%s)"%save_sele,state=stateSave,quiet=0)
+
 
     def update_save_listbox(self):
         """
@@ -923,48 +1100,48 @@ class Normal(PMGSkin):
             self.menuBar.addmenuitem('Topics', 'command',
                                      'Introductory Screencasts',
                                      label='Introductory Screencasts',
-                                     command = lambda bo=browser_open:bo("http://pymol.org/id/media:intro"))
+                                     command = lambda bo=browser_open:bo("http://pymol.org/dsc/id/media:intro"))
 
             self.menuBar.addmenuitem('Topics', 'command',
                                      'Core Commands',
                                      label='Core Commands',
-                                     command = lambda bo=browser_open:bo("http://pymol.org/id/command:core_set"))
+                                     command = lambda bo=browser_open:bo("http://pymol.org/dsc/id/command:core_set"))
 
             self.menuBar.addmenuitem('Topics', 'separator', '')
 
             self.menuBar.addmenuitem('Topics', 'command',
                                      'Settings',
                                      label='Settings',
-                                     command = lambda bo=browser_open:bo("http://pymol.org/id/setting"))
+                                     command = lambda bo=browser_open:bo("http://pymol.org/dsc/id/setting"))
 
             self.menuBar.addmenuitem('Topics', 'command',
                                      'Atom Selections',
                                      label='Atom Selections',
-                                     command = lambda bo=browser_open:bo("http://pymol.org/id/selection"))
+                                     command = lambda bo=browser_open:bo("http://pymol.org/dsc/id/selection"))
                                     
             self.menuBar.addmenuitem('Topics', 'command',
                                      'Commands',
                                      label='Commands',
-                                     command = lambda bo=browser_open:bo("http://pymol.org/id/command"))
+                                     command = lambda bo=browser_open:bo("http://pymol.org/dsc/id/command"))
             
             self.menuBar.addmenuitem('Topics', 'command',
                                      'Launching',
                                      label='Launching',
-                                     command = lambda bo=browser_open:bo("http://pymol.org/id/launch"))
+                                     command = lambda bo=browser_open:bo("http://pymol.org/dsc/id/launch"))
             
             self.menuBar.addmenuitem('Topics', 'separator', '')
             
             self.menuBar.addmenuitem('Topics', 'command',
                                      'Concepts',
                                      label='Concepts',
-                                     command = lambda bo=browser_open:bo("http://pymol.org/id/concept"))
+                                     command = lambda bo=browser_open:bo("http://pymol.org/dsc/id/concept"))
 
             self.menuBar.addmenuitem('Topics', 'separator', '')
             
             self.menuBar.addmenuitem('Topics', 'command',
                                      'A.P.I. Methods',
                                      label='A.P.I. Methods',
-                                     command = lambda bo=browser_open:bo("http://pymol.org/id/api"))
+                                     command = lambda bo=browser_open:bo("http://pymol.org/dsc/id/api"))
 
             self.menuBar.addmenuitem('Help', 'separator', '')
             
@@ -976,7 +1153,7 @@ class Normal(PMGSkin):
             self.menuBar.addmenuitem('Help', 'command',
                                      'Join or browse the pymol-users mailing list',
                                      label='PyMOL Mailing List',
-                                     command = lambda bo=browser_open:bo("http://www.pymol.org/maillist"))
+                                     command = lambda bo=browser_open:bo("https://lists.sourceforge.net/lists/listinfo/pymol-users"))
 
             self.menuBar.addmenuitem('Help', 'command',
                                      'Access the PyMOL Home Page',
@@ -1093,6 +1270,11 @@ class Normal(PMGSkin):
         self.menuBar.addmenuitem('File', 'command', 'Open structure file.',
                                 label='Open...',
                                 command=self.file_open)
+
+        if _wincheck():
+            self.menuBar.addmenuitem('File', 'command', 'Autoload MTZ file.',
+                                    label='Open MTZ with Defaults...',
+                                    command=self.file_autoload_mtz)
 
         self.menuBar.addmenuitem('File', 'command', 'Save session.',
                                 label='Save Session',
@@ -1387,7 +1569,7 @@ class Normal(PMGSkin):
             "_ editor.attach_amino_acid('pk1','glu')"))
 
         self.menuBar.addmenuitem('Residue', 'command', 'Glutamine',
-                                         label='Glutamine [Alt-N]',
+                                         label='Glutamine [Alt-Q]',
                                          command = lambda s=self: s.cmd.do(
             "_ editor.attach_amino_acid('pk1','gln')"))
 

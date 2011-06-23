@@ -1258,7 +1258,7 @@ static void CGORenderQuadricRay(CRay * ray, float *v, float r, float *q)
 
 void CGORenderRay(CGO * I, CRay * ray, float *color, CSetting * set1, CSetting * set2)
 {
-  register float *pc = I->op;
+  register float *pc;
   register int op;
   int vc = 0;
   float linewidth = 1.0F;
@@ -1266,10 +1266,15 @@ void CGORenderRay(CGO * I, CRay * ray, float *color, CSetting * set1, CSetting *
   float lineradius, dotradius, dotwidth;
   float white[] = { 1.0, 1.0, 1.0 };
   float zee[] = { 0.0, 0.0, 1.0 };
-
+  
   float *n0 = NULL, *n1 = NULL, *n2 = NULL, *v0 = NULL, *v1 = NULL, *v2 = NULL, *c0 =
     NULL, *c1 = NULL, *c2 = NULL;
   int mode = -1;
+
+  /* workaround; multi-state ray-trace bug */
+  if (I)
+    pc = I->op;
+  else return;
 
   I->G->CGORenderer->alpha =
     1.0F - SettingGet_f(I->G, set1, set2, cSetting_cgo_transparency);

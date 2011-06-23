@@ -25,6 +25,7 @@ if __name__=='pymol.exporting':
     from cmd import _cmd,lock,unlock,Shortcut,QuietException
     from chempy import io
     from chempy.sdf import SDF,SDFRec
+    from chempy.mol2 import MOL2
     from cmd import _feedback,fb_module,fb_mask, \
                      DEFAULT_ERROR, DEFAULT_SUCCESS, _raising, is_ok, is_error, \
                      is_list, is_dict, is_tuple, loadable
@@ -386,6 +387,16 @@ DESCRIPTION
         if _self._raising(r,_self): raise QuietException
         return r
 
+    def assign_atom_types( selection, format = "mol2", state=1, quiet=1, _self=cmd):
+        r = DEFAULT_ERROR
+        try:
+            _self.lock(_self)
+            # format : mol2/sybyl = 1, macromodel/mmd = 2, global setting atom_type_format = 0
+            r = _cmd.assign_atom_types(_self._COb, selection, int(1), int(state-1), quiet)
+        finally:
+            _self.unlock(r,_self)
+        return r
+
     def save(filename, selection='(all)', state=-1, format='', ref='',
              ref_state=-1, quiet=1, partial=0,_self=cmd):
         '''
@@ -478,6 +489,8 @@ SEE ALSO
                 format = 'wrl'
             elif re.search("\.idtf$",lc_filename):
                 format = 'idtf'
+            elif re.search("\.mol2$",lc_filename):
+                format = 'mol2'
             else:
                 format = str(format)
         if format=='unknown':
@@ -587,11 +600,29 @@ SEE ALSO
             r = DEFAULT_SUCCESS
             if not quiet:
                 print " Save: wrote %d states to \"%s\"."%(1+last_state-first_state,filename)
-        elif format=='mol': 
+        elif format=='mol':
             io.mol.toFile(_self.get_model(selection,state,ref,ref_state),filename)
             r = DEFAULT_SUCCESS
             if not quiet:
                 print " Save: wrote \""+filename+"\"."
+        elif format=="mol2":
+            state = int(state)
+            if state==0:
+                first_state = 1
+                last_state = cmd.count_states(selection)
+            else:
+                first_state = state
+                last_state = state
+            recList=[]
+            for state in range(first_state, last_state+1):
+                # assign_atom_types selection, format [ mol2, macromodel ], state, quiet
+                assign_atom_types(selection, "mol2", state, 1, _self)
+                recList.extend(io.mol2.toList(_self.get_model(selection,state,ref,ref_state),selection=selection,state=state))
+            m = MOL2(cmd=cmd)
+            m.strToFile(recList,filename)
+            r = DEFAULT_SUCCESS
+            if not quiet:
+                print " Save: wrote %d states to \"%s\"."%(1+last_state-first_state,filename)
         elif format=='png':
             r = _self.png(filename,quiet=quiet)
         # refactor below to lift repeated code

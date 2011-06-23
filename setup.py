@@ -60,7 +60,9 @@ elif sys.platform=='cygwin':
     # NOTE: this branch not tested in years and may not work...
     inc_dirs=["ov/src",
               "layer0","layer1","layer2",
-              "layer3","layer4","layer5"]
+              "layer3","layer4","layer5",
+	      "modules/cealign/src", 
+	      "modules/cealign/src/tnt" ]
     libs=["glut32","opengl32","glu32","png"]
     pyogl_libs = ["glut32","opengl32","glu32"]
     lib_dirs=["/usr/lib/w32api"]
@@ -164,10 +166,10 @@ else: # linux or other unix
 #              "contrib/uiuc/plugins/molfile_plugin/src",
               "modules/cealign/src",
 	      "modules/cealign/src/tnt", ]
-    libs=["GL","GLU","glut","png","z","freetype",
+    libs=["GL","GLU","glut","png","z","freetype", "GLEW",
 #          "Xxf86vm"
           ]	
-    pyogl_libs = ["GL","GLU","glut"]
+    pyogl_libs = ["GL","GLU","glut", "GLEW"]
     lib_dirs=[
         "/usr/X11R6/lib",
 #        "/users/warren/pymol/ext/lib"
@@ -177,18 +179,19 @@ else: # linux or other unix
                 ("_PYMOL_FREETYPE",None),
                 ("_PYMOL_LIBPNG",None),
 # OpenGL shaders
-#               ("_PYMOL_OPENGL_SHADERS",None),
+               ("_PYMOL_OPENGL_SHADERS",None),
 # Numeric Python support                    
 #                ("_PYMOL_NUMPY",None),
 # VMD plugin support           
 #               ("_PYMOL_VMD_PLUGINS",None)
+		("NO_MMLIBS",None),
                 ]
     ext_comp_args=["-ffast-math","-funroll-loops","-O3"]
     ext_link_args=[]
   
 setup ( # Distribution meta-data
     name = "pymol",
-	version = "1.2.0", # see layer0/Version.h for updated version
+	version = "1.4.0", # see layer0/Version.h for updated version
 	package_dir = {'' : 'modules'},
 	packages = ['chempy',
                 'chempy/bmin',
@@ -207,7 +210,10 @@ setup ( # Distribution meta-data
                 'pymol/opengl/gl',
                 'pymol/opengl/glu',
                 'pymol/opengl/glut',
-                'pymol/wizard'],
+                'pymol/wizard',
+		'web',
+		'web/examples',
+		'web/javascript', ],
 	ext_modules = [
     Extension("pymol._cmd", [
     "modules/cealign/src/ccealignmodule.cpp",
@@ -238,6 +244,7 @@ setup ( # Distribution meta-data
     "layer0/Queue.c",
     "layer0/Raw.c",
     "layer0/Sphere.c",
+    "layer0/ShaderMgr.c",
     "layer0/Tetsurf.c",
     "layer0/Texture.c",
     "layer0/Tracker.c",
@@ -293,6 +300,7 @@ setup ( # Distribution meta-data
     "layer2/ObjectMolecule2.c",
     "layer2/ObjectSurface.c",
     "layer2/ObjectSlice.c",
+    "layer2/ObjectVolume.c",
     "layer2/RepCartoon.c",
     "layer2/RepCylBond.c",
     "layer2/RepDistDash.c",

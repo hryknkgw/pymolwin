@@ -22,6 +22,8 @@
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
 #ifdef WIN32
 #include <signal.h>
+#include <tchar.h>
+#include <stdafx.h>
 #endif
 
 /* END PROPRIETARY CODE SEGMENT */
@@ -51,7 +53,7 @@
 #include "Util.h"
 #include "Control.h"
 #include "Movie.h"
-
+#include "Shader.h"
 #ifdef _PYMOL_NO_MAIN
 
 int MainSavingUnderWhileIdle(void)
@@ -320,7 +322,7 @@ static void DrawBlueLine(PyMOLGlobals * G)
 
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
 #ifdef _PYMOL_OSX
-    //glDisable(GL_SHARED_TEXTURE_PALETTE_EXT);
+    /*glDisable(GL_SHARED_TEXTURE_PALETTE_EXT); */
     glDisable(GL_TEXTURE_1D);
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_TEXTURE_3D);
@@ -1217,6 +1219,7 @@ static void MainInit(PyMOLGlobals * G)
   I->DeferReshapeDeferral = 1;
 
   PyMOL_Start(PyMOLInstance);
+  PyMOL_ConfigureShadersGL(PyMOLInstance);
 
   PyMOL_SetSwapBuffersFn(PyMOLInstance, (PyMOLSwapBuffersFn *) p_glutSwapBuffers);
   I->ReshapeTime = (I->IdleTime = UtilGetSeconds(G));
@@ -1631,7 +1634,7 @@ void MainCheckWindowFit(PyMOLGlobals * G)
 
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
 #ifdef WIN32
-BOOL WINAPI HandlerRoutine(DWORD dwCtrlType     //  control signal type
+BOOL WINAPI HandlerRoutine(DWORD dwCtrlType     /*  control signal type */
   )
 {
   switch (dwCtrlType) {
@@ -1652,6 +1655,7 @@ void sharp3d_prepare_context(void);
 
 static void launch(CPyMOLOptions * options, int own_the_options)
 {
+
   int multisample_mask = 0;
   int theWindow = 0;
   PyMOLGlobals *G = NULL;
@@ -1690,6 +1694,7 @@ static void launch(CPyMOLOptions * options, int own_the_options)
     SetConsoleCtrlHandler(HandlerRoutine,       // address of handler function
                           true  // handler to add or remove
       );
+    SetConsoleTitle(_T("PyMOL"));
 #endif
 
 #ifdef _PYMOL_SHARP3D
@@ -1843,7 +1848,6 @@ static void launch(CPyMOLOptions * options, int own_the_options)
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
 #endif
-
   MainInit(G);
   if(own_the_options)
     G->Main->OwnedOptions = options;

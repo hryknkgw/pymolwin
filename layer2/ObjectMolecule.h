@@ -35,6 +35,9 @@ Z* -------------------------------------------------------------------
 
 #define cUndoMask 0xF
 
+/*
+ * ObjectMolecule's Bond Path (BP) Record
+ */
 typedef struct ObjectMoleculeBPRec {
   int *dist;
   int *list;
@@ -73,7 +76,6 @@ typedef struct ObjectMolecule {
   CGO *UnitCellCGO;
   int BondCounter;
   int AtomCounter;
-  ObjectDist* DistList;	/* -- JV; head pointer to a doubly linked list of ObjectDistances for this molecule */
   /* not stored */
   struct CSculpt *Sculpt;
   int RepVisCacheValid;
@@ -338,6 +340,7 @@ ObjectMolecule *ObjectMoleculeReadXYZStr(PyMOLGlobals * G, ObjectMolecule * I,
 void ObjectMoleculeExtendIndices(ObjectMolecule * I, int state);
 
 void ObjectMoleculeInvalidate(ObjectMolecule * I, int rep, int level, int state);
+void ObjectMoleculeInvalidateAtomType(ObjectMolecule *I, int state);
 
 void ObjectMoleculeRenderSele(ObjectMolecule * I, int curState, int sele, int vis_only);
 
@@ -415,6 +418,8 @@ void ObjectMoleculeSculptImprint(ObjectMolecule * I, int state, int match_state,
 float ObjectMoleculeSculptIterate(ObjectMolecule * I, int state, int n_cycle,
                                   float *center);
 void ObjectMoleculeSculptClear(ObjectMolecule * I);
+
+/* bond paths */
 int ObjectMoleculeGetBondPaths(ObjectMolecule * I, int atom, int max,
                                ObjectMoleculeBPRec * bp);
 int ObjectMoleculeInitBondPath(ObjectMolecule * I, ObjectMoleculeBPRec * bp);
@@ -495,6 +500,16 @@ ObjectMolecule *ObjectMoleculeLoadPDBFile(PyMOLGlobals * G, ObjectMolecule * obj
                                           char *fname, int frame, int discrete,
                                           M4XAnnoType * m4x, PDBInfoRec * pdb_info);
 
+#endif
+
+#ifndef NO_MMLIBS
+int ObjectMoleculeToMMCT(PyMOLGlobals * G, ObjectMolecule * obj, int state, const char *component, const char *helpcmd);
+int MMStereoInfo(PyMOLGlobals * G, ObjectMolecule * obj, int state, int mmct, int write, int setparity);
+int initializeMMLibs();
+int ObjectMoleculeUpdateMMStereoInfo(PyMOLGlobals * G, ObjectMolecule * obj);
+int ObjectMoleculeUpdateAtomTypeInfoForState(PyMOLGlobals * G, ObjectMolecule * obj, int state, int initialize, int format);
+int ObjectMoleculeUpdateAtomTypeInfo(PyMOLGlobals * G, ObjectMolecule * obj);
+int MMSetAtomTypes(PyMOLGlobals *G, ObjectMolecule *obj, int state, int mmct, int force_type);
 #endif
 
 #endif

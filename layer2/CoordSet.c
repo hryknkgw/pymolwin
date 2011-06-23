@@ -238,9 +238,11 @@ void CoordSetMerge(CoordSet * I, CoordSet * cs)
   int nIndex;
   int a, i0;
 
+  /* calculate new size and make room for new data */
   nIndex = I->NIndex + cs->NIndex;
   I->IdxToAtm = Realloc(I->IdxToAtm, int, nIndex);
   VLACheck(I->Coord, float, nIndex * 3);
+
   for(a = 0; a < cs->NIndex; a++) {
     i0 = a + I->NIndex;
     I->IdxToAtm[i0] = cs->IdxToAtm[a];
@@ -436,6 +438,8 @@ int CoordSetMoveAtom(CoordSet * I, int at, float *v, int mode)
   int result = 0;
   float *v1;
 
+  /* grab the CoordSet's MolecularObject and query
+   * for a discrete load; if so, adjust index. */
   obj = I->Obj;
   if(obj->DiscreteFlag) {
     if(I == obj->DiscreteCSet[at])
@@ -443,6 +447,7 @@ int CoordSetMoveAtom(CoordSet * I, int at, float *v, int mode)
   } else
     a1 = I->AtmToIdx[at];
 
+  /* valid index, then set the new coord */
   if(a1 >= 0) {
     result = 1;
     v1 = I->Coord + 3 * a1;
@@ -465,6 +470,7 @@ int CoordSetMoveAtomLabel(CoordSet * I, int at, float *v, int mode)
   int result = 0;
   LabPosType *lp;
 
+  /* discrete index adjustments  */
   obj = I->Obj;
   if(obj->DiscreteFlag) {
     if(I == obj->DiscreteCSet[at])
@@ -472,6 +478,8 @@ int CoordSetMoveAtomLabel(CoordSet * I, int at, float *v, int mode)
   } else
     a1 = I->AtmToIdx[at];
 
+  /* if label is valid, get the label offset
+   * and set the new position relative to that */
   if(a1 >= 0) {
     if(!I->LabPos)
       I->LabPos = VLACalloc(LabPosType, I->NIndex);
@@ -1010,7 +1018,9 @@ void CoordSetInvalidateRep(CoordSet * I, int type, int level)
   if(level >= cRepInvVisib) {
     I->Obj->RepVisCacheValid = false;
   }
+  /* graphical representations need redrawing */
   if(level == cRepInvVisib) {
+    /* cartoon_side_chain_helper */
     if(SettingGet_b(I->State.G, I->Setting, I->Obj->Obj.Setting,
                     cSetting_cartoon_side_chain_helper)) {
       if((type == cRepCyl) || (type == cRepLine) || (type == cRepSphere))
@@ -1021,6 +1031,7 @@ void CoordSetInvalidateRep(CoordSet * I, int type, int level)
         CoordSetInvalidateRep(I, cRepSphere, cRepInvVisib2);
       }
     }
+    /* ribbon_side_chain_helper */
     if(SettingGet_b(I->State.G, I->Setting, I->Obj->Obj.Setting,
                     cSetting_ribbon_side_chain_helper)) {
       if((type == cRepCyl) || (type == cRepLine) || (type == cRepSphere))
@@ -1031,6 +1042,7 @@ void CoordSetInvalidateRep(CoordSet * I, int type, int level)
         CoordSetInvalidateRep(I, cRepSphere, cRepInvVisib2);
       }
     }
+    /* line_stick helper  */
     if(SettingGet_b(I->State.G, I->Setting, I->Obj->Obj.Setting,
                     cSetting_line_stick_helper)) {
       if(type == cRepCyl)
@@ -1050,6 +1062,7 @@ void CoordSetInvalidateRep(CoordSet * I, int type, int level)
   if(level >= cRepInvColor)
     VLAFreeP(I->Color);
 
+  /* invalidate basd on one representation, 'type' */
   if(type >= 0) {               /* representation specific */
     if(type < cRepCnt) {
       int eff_level = level;
@@ -1109,6 +1122,7 @@ void CoordSetInvalidateRep(CoordSet * I, int type, int level)
   if(level >= cRepInvCoord) {   /* if coordinates change, then this map becomes invalid */
     MapFree(I->Coord2Idx);
     I->Coord2Idx = NULL;
+    /* invalidate distances */
   }
   SceneChanged(I->State.G);
 }
@@ -1407,11 +1421,11 @@ CoordSet *CoordSetNew(PyMOLGlobals * G)
   I->fExtendIndices = CoordSetExtendIndices;
   I->fAppendIndices = CoordSetAppendIndices;
   I->fInvalidateRep = CoordSetInvalidateRep;
-
   I->PeriodicBoxType = cCSet_NoPeriodicity;
 
   I->SpheroidSphereSize = I->State.G->Sphere->Sphere[1]->nDot;  /* does this make any sense? */
 
+  I->noInvalidateMMStereoAndTextType = 0;
   return (I);
 }
 
@@ -1420,31 +1434,32 @@ CoordSet *CoordSetNew(PyMOLGlobals * G)
 CoordSet *CoordSetCopy(CoordSet * cs)
 {
   int nAtom;
-
+  /* OOAlloc declares and defines, I:
+   * I = ... */
   OOAlloc(cs->State.G, CoordSet);
-
+  /* shallow copy */
   (*I) = (*cs);                 /* NOTE: must deep-copy all pointers in this struct */
-
+  /* deep copy state struct */
   ObjectStateCopy(&cs->State, &I->State);
-
+  /* deep copy & return ptr to new symmetry */
   I->Symmetry = SymmetryCopy(cs->Symmetry);
 
   if(I->PeriodicBox)
     I->PeriodicBox = CrystalCopy(I->PeriodicBox);
-
+  /* copy the coords */
   I->Coord = VLAlloc(float, I->NIndex * 3);
   UtilCopyMem(I->Coord, cs->Coord, sizeof(float) * 3 * I->NIndex);
-
+  /* copy label positions if present in source */
   if(cs->LabPos) {
     I->LabPos = VLACalloc(LabPosType, I->NIndex);
     UtilCopyMem(I->LabPos, cs->LabPos, sizeof(LabPosType) * I->NIndex);
   }
-
+  /* copy ref pos if in source */
   if(cs->RefPos) {
     I->RefPos = VLACalloc(RefPosType, I->NIndex);
     UtilCopyMem(I->RefPos, cs->RefPos, sizeof(RefPosType) * I->NIndex);
   }
-
+  /* copy atom to index mapping, if shallow copied from source */
   if(I->AtmToIdx) {
     nAtom = cs->Obj->NAtom;
     I->AtmToIdx = Alloc(int, nAtom);
@@ -1602,7 +1617,7 @@ void CoordSetFree(CoordSet * I)
     CGOFree(I->SculptCGO);
     VLAFreeP(I->LabPos);
     VLAFreeP(I->RefPos);
-
+    /* free and make null */
     OOFreeP(I);
   }
 }
