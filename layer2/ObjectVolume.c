@@ -21,6 +21,11 @@ Z* -------------------------------------------------------------------
 
 #include<math.h>
 
+#if defined(_WIN32) || defined(_WIN64)
+#define fmax(a,b) (((a) > (b)) ? (a) : (b))
+#define fmin(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
 #include"OOMac.h"
 #include"ObjectVolume.h"
 #include"Base.h"
