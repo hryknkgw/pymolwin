@@ -187,7 +187,7 @@ void PyMOL_NeedFakeDrag(CPyMOL * I);
 void PyMOL_NeedRedisplay(CPyMOL * I);
 void PyMOL_NeedSwap(CPyMOL * I);
 void PyMOL_SetClickReady(CPyMOL * I, char *name, int index, int button, int mod, int x,
-                         int y);
+                         int y, float *pos, int state);
 void PyMOL_SetPassive(CPyMOL * I, int onOff);
 void PyMOL_NeedReshape(CPyMOL * I, int mode, int x, int y, int width, int height);
 
@@ -350,8 +350,20 @@ PyMOLreturn_status PyMOL_CmdDisable(CPyMOL * I, char *name, int quiet);
 
 PyMOLreturn_status PyMOL_CmdDelete(CPyMOL * I, char *name, int quiet);
 
-PyMOLreturn_status PyMOL_CmdSet(CPyMOL * I, char *setting, char *value, char *selection,
+PyMOLreturn_status PyMOL_CmdSet(CPyMOL * I, char *setting, char *value,
+                                char *selection,
                                 int state, int quiet, int side_effects);
+
+PyMOLreturn_status PyMOL_CmdUnset(CPyMOL * I, char *setting, char *selection,
+                                  int state, int quiet, int side_effects);
+
+PyMOLreturn_status PyMOL_CmdSetBond(CPyMOL * I, char *setting, char *value,
+                                    char *selection1, char *selection2,
+                                    int state, int quiet, int side_effects);
+
+PyMOLreturn_status PyMOL_CmdUnsetBond(CPyMOL * I, char *setting,
+                                      char *selection1, char *selection2,
+                                      int state, int quiet, int side_effects);
 
 PyMOLreturn_status PyMOL_CmdColor(CPyMOL * I, char *color, char *selection, int flags,
                                   int quiet);
@@ -449,6 +461,13 @@ PyMOLreturn_status PyMOL_CmdRampNew(CPyMOL * I, char *name, char *map, float *ra
                                     int n_range, char *color, int state, char *selection,
                                     float beyond, float within, float sigma,
                                     int zero, int calc_mode, int quiet);
+
+PyMOLreturn_status PyMOL_CmdPseudoatom(CPyMOL * I, char *object_name, char *sele,
+				       char *name, char *resn, char *resi, char *chain,
+				       char *segi, char *elem, float vdw, int hetatm,
+				       float b, float q, char *color, char *label, 
+				       int set_xyz, float x, float y, float z,
+				       int state, int mode, int quiet);
 
 
 /* releasing returned values */

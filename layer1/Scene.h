@@ -58,7 +58,7 @@ typedef float SceneViewType[cSceneViewSize];
 */
 
 float SceneGetDynamicLineWidth(RenderInfo * info, float line_width);
-
+void SceneInvalidateStencil(PyMOLGlobals * G);
 int SceneHasImage(PyMOLGlobals * G);
 int SceneInit(PyMOLGlobals * G);
 void SceneDone(PyMOLGlobals * G);
@@ -128,7 +128,7 @@ void SceneScale(PyMOLGlobals * G, float scale);
 void SceneResetNormal(PyMOLGlobals * G, int lines);
 
 int SceneObjectAdd(PyMOLGlobals * G, CObject * obj);
-int SceneObjectDel(PyMOLGlobals * G, CObject * obj);
+int SceneObjectDel(PyMOLGlobals * G, CObject * obj, int allow_purge);
 int SceneObjectIsActive(PyMOLGlobals * G, CObject * obj);
 void SceneOriginSet(PyMOLGlobals * G, float *origin, int preserve);
 void SceneOriginGet(PyMOLGlobals * G, float *origin);

@@ -108,7 +108,6 @@ struct _COrtho {
 };
 
 void OrthoParseCurrentLine(PyMOLGlobals * G);
-static void OrthoDrawWizardPrompt(PyMOLGlobals * G);
 
 Block *OrthoFindBlock(PyMOLGlobals * G, int x, int y);
 void OrthoKeyControl(PyMOLGlobals * G, unsigned char k);
@@ -813,7 +812,8 @@ void OrthoKey(PyMOLGlobals * G, unsigned char k, int x, int y, int mod)
   } else
     switch (k) {
     case 32:                   /* spacebar */
-      if(!OrthoArrowsGrabbed(G)) {
+      if((!OrthoArrowsGrabbed(G)) &&
+	 (I->CurChar == I->PromptChar)) { /* no text entered yet... */
         if(SettingGetGlobal_b(G, cSetting_presentation)) {
           if(mod & cOrthoSHIFT) {
             OrthoCommandIn(G,"rewind;mplay");
@@ -1541,7 +1541,7 @@ void OrthoDoDraw(PyMOLGlobals * G, int render_mode)
 
 /*========================================================================*/
 
-static void OrthoDrawWizardPrompt(PyMOLGlobals * G)
+void OrthoDrawWizardPrompt(PyMOLGlobals * G)
 {
   /* assumes PMGUI */
 
@@ -1701,7 +1701,7 @@ static void OrthoLayoutPanel(PyMOLGlobals * G,
     block->active = true;
 #else
     block = ExecutiveGetBlock(G);
-    BlockSetMargin(block, m_top, m_left, wizardTop, m_right);
+    BlockSetMargin(block, m_top, m_left, executiveBottom, m_right);
     block->active = true;
 
     block = WizardGetBlock(G);
@@ -1848,6 +1848,7 @@ void OrthoReshape(PyMOLGlobals * G, int width, int height, int force)
 
     WizardRefresh(G);           /* safe to call even if no wizard exists */
   }
+  SceneInvalidateStencil(G);
   OrthoDirty(G);
 }
 

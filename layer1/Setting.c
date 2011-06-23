@@ -718,7 +718,7 @@ int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
   SettingSet_b(I, cSetting_use_display_lists, use_display_lists);
   SettingSet_i(I, cSetting_max_threads, max_threads);
   SettingSet_i(I, cSetting_nvidia_bugs, nvidia_bugs);
-  SettingSet_i(I, cSetting_nvidia_bugs, ati_bugs);
+  SettingSet_i(I, cSetting_ati_bugs, ati_bugs);
   SettingSet_i(I, cSetting_cache_max, cache_max);
   SettingSet_i(I, cSetting_logging, logging);
 
@@ -741,6 +741,11 @@ int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
   if(G->Option->no_quit) {
     SettingSet_b(I, cSetting_presentation_auto_quit, 0);
   }
+
+#ifdef _PYMOL_ACTIVEX
+  SettingSet_i(I, cSetting_max_threads, 1);
+  SettingSet_b(I, cSetting_async_builds, 0);
+#endif
   return (ok);
 #endif
 }
@@ -2552,6 +2557,9 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_sculpting:
     OrthoDirty(G);
     break;
+  case cSetting_auto_overlay:
+    OrthoRemoveAutoOverlay(G); /* always start clean */
+    break;
   case cSetting_overlay:
   case cSetting_overlay_lines:
   case cSetting_text:
@@ -3027,7 +3035,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
 
     set_b(I, cSetting_normal_workaround, 0);
 
-    set_b(I, cSetting_backface_cull, 1);
+    set_b(I, cSetting_backface_cull, 0); 
 
     set_f(I, cSetting_gamma, 1.0F);
 
@@ -3189,7 +3197,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
 
     set_f(I, cSetting_sphere_scale, 1.0F);
 
-    set_b(I, cSetting_two_sided_lighting, -1);
+    set_i(I, cSetting_two_sided_lighting, -1);
 
     set_f(I, cSetting_secondary_structure, 2.0F);       /* unused? */
 
@@ -3439,6 +3447,9 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_i(I, cSetting_cartoon_flat_cycles, 4);
 
 #ifdef WIN32
+#ifdef _PYMOL_ACTIVEX
+    set_i(I, cSetting_max_threads, 1);
+#else
     /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
     {
       SYSTEM_INFO SysInfo;
@@ -3453,6 +3464,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
       }
     }
     /* END PROPRIETARY CODE SEGMENT */
+#endif
 #else
     set_i(I, cSetting_max_threads, 1);
 #endif
@@ -3886,5 +3898,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_i(I, cSetting_motion_simple, 0);
     set_f(I, cSetting_motion_linear, 0.0F);
     set_i(I, cSetting_motion_hand, 1);
+    set_b(I, cSetting_pdb_ignore_conect, 0);
+    set_b(I, cSetting_editor_bond_cycle_mode, 1); /* >0 -> include aromatic */
   }
 }

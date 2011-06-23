@@ -1,4 +1,3 @@
-
 /* 
 A* -------------------------------------------------------------------
 B* This file contains source code for the PyMOL computer program
@@ -202,7 +201,7 @@ struct _CScene {
 
   int *SlotVLA;
 
-  int StencilValid;
+  int StencilValid, StencilParity;
   int ReinterpolateFlag;
   CObject *ReinterpolateObj;
   CObject *MotionGrabbedObj;
@@ -383,7 +382,7 @@ static void GridUpdate(GridInfo * I, float asp_ratio, int mode, int size)
   }
 }
 
-static void SceneInvalidateStencil(PyMOLGlobals * G)
+void SceneInvalidateStencil(PyMOLGlobals * G)
 {
   register CScene *I = G->Scene;
   I->StencilValid = false;
@@ -936,7 +935,6 @@ void SceneFromViewElem(PyMOLGlobals * G, CViewElem * elem, int dirty)
     }
   }
   if(elem->state_flag&&!MovieDefined(G)) {
-    printf("%d\n",elem->state+1);
     SettingSetGlobal_i(G, cSetting_state, (elem->state)+1);
   }
   if(changed_flag) {
@@ -2669,7 +2667,7 @@ int SceneObjectIsActive(PyMOLGlobals * G, CObject * obj)
   return result;
 }
 
-int SceneObjectDel(PyMOLGlobals * G, CObject * obj)
+int SceneObjectDel(PyMOLGlobals * G, CObject * obj, int allow_purge)
 {
   register CScene *I = G->Scene;
   ObjRec *rec = NULL;
@@ -2678,7 +2676,7 @@ int SceneObjectDel(PyMOLGlobals * G, CObject * obj)
   if(!obj) {                    /* deletes all members */
     while(ListIterate(I->Obj, rec, next)) {
       if(rec) {
-        if(defer_builds_mode >= 3) {
+        if(allow_purge && (defer_builds_mode >= 3)) {
           /* purge graphics representation when no longer used */
           if(rec->obj->fInvalidate)
             rec->obj->fInvalidate(rec->obj, cRepAll, cRepInvPurge, -1);
@@ -2692,7 +2690,7 @@ int SceneObjectDel(PyMOLGlobals * G, CObject * obj)
       if(rec->obj == obj)
         break;
     if(rec) {
-      if(defer_builds_mode >= 3) {
+      if(allow_purge && (defer_builds_mode >= 3)) {
         /* purge graphics representation when no longer used */
         if(rec->obj->fInvalidate)
           rec->obj->fInvalidate(rec->obj, cRepAll, cRepInvPurge, -1);
@@ -2790,7 +2788,7 @@ int SceneLoadPNG(PyMOLGlobals * G, char *fname, int movie_flag, int stereo, int 
 #define SceneTextLeftMargin 1
 #define SceneScrollBarMargin 1
 #define SceneScrollBarWidth 13
-
+#ifndef _PYMOL_NOPY
 static void draw_button(int x2, int y2, int z, int w, int h, float *light, float *dark,
                         float *inside)
 {
@@ -2830,8 +2828,8 @@ static void draw_button(int x2, int y2, int z, int w, int h, float *light, float
     glVertex3i(x2 + w - 1, y2 + 1, z);
     glEnd();
   }
-
 }
+#endif
 
 int SceneSetNames(PyMOLGlobals * G, PyObject * list)
 {
@@ -3054,11 +3052,12 @@ static void SceneUpdateButtons(PyMOLGlobals * G)
   SceneDrawButtons(I->Block, false);
 }
 
-void SceneDraw(Block * block)
+void SceneDraw(Block * block) /* returns true if scene was drawn (using a cached image) */
 {
   PyMOLGlobals *G = block->G;
   register CScene *I = G->Scene;
   int overlay, text;
+  int drawn = false; 
 
   if(G->HaveGUI && G->ValidContext) {
 
@@ -3194,6 +3193,7 @@ void SceneDraw(Block * block)
                             (int) ((I->Height - tmp_height) / 2 + I->Block->rect.bottom),
                             -10);
               PyMOLDrawPixels(tmp_width, tmp_height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+              drawn = true;
             }
             FreeP(buffer);
           }
@@ -3276,7 +3276,7 @@ void SceneDraw(Block * block)
                         (int) ((I->Height - tmp_height) / 2 + I->Block->rect.bottom),
                         -10);
           PyMOLDrawPixels(tmp_width, tmp_height, GL_RGBA, GL_UNSIGNED_BYTE, tmp_buffer);
-
+          drawn = true;
         }
         FreeP(tmp_buffer);
       } else if(I->CopyForced) {        /* near-exact fit */
@@ -3325,13 +3325,15 @@ void SceneDraw(Block * block)
         glRasterPos3i((int) ((I->Width - width) / 2 + I->Block->rect.left),
                       (int) ((I->Height - height) / 2 + I->Block->rect.bottom), -10);
         PyMOLDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, tmp_buffer);
+        drawn = true;
         FreeP(tmp_buffer);
       } else {                  /* not a forced copy, so don't show/blend alpha */
         glRasterPos3i((int) ((I->Width - width) / 2 + I->Block->rect.left),
                       (int) ((I->Height - height) / 2 + I->Block->rect.bottom), -10);
         PyMOLDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
+        drawn = true;
       }
+
       I->RenderTime = -I->LastRender;
       I->LastRender = UtilGetSeconds(G);
       I->RenderTime += I->LastRender;
@@ -3344,6 +3346,10 @@ void SceneDraw(Block * block)
       I->ButtonMargin = 0;
     }
   }
+  if(drawn)
+    OrthoDrawWizardPrompt(G); /* ugly hack necessitated because wizard
+                                 prompt is overwritten when image is drawn */
+
 }
 
 int SceneGetButtonMargin(PyMOLGlobals * G)
@@ -4550,8 +4556,18 @@ static int SceneClick(Block * block, int button, int x, int y, int mod, double w
           }
           switch (mode) {
           case cButModeSimpleClick:
-            PyMOL_SetClickReady(G->PyMOL, obj->Name, I->LastPicked.src.index,
-                                button, mod, I->LastWinX, I->Height - (I->LastWinY + 1));
+	    {
+	      float pos_store[3], *pos = pos_store;
+	      int index = I->LastPicked.src.index; /* 1-based */
+	      int state = ObjectGetCurrentState(obj, true);
+	      if(!( (obj->type == cObjectMolecule) &&
+		    (I->LastPicked.src.index >= 0 ) &&
+		    ObjectMoleculeGetAtomTxfVertex((ObjectMolecule *)obj,-1,index, pos)))
+		pos = NULL;
+	      PyMOL_SetClickReady(G->PyMOL, obj->Name, I->LastPicked.src.index,
+				  button, mod, I->LastWinX, I->Height - (I->LastWinY + 1),
+				  pos, state + 1); /* send a 1-based state index */
+	    }
             break;
           case cButModeLB:
           case cButModeMB:
@@ -4658,7 +4674,7 @@ static int SceneClick(Block * block, int button, int x, int y, int mod, double w
           break;
         case cButModeSimpleClick:
           PyMOL_SetClickReady(G->PyMOL, "", -1, button, mod, I->LastWinX,
-                              I->Height - (I->LastWinY + 1));
+                              I->Height - (I->LastWinY + 1), NULL, 0);
           break;
         }
         PRINTFB(G, FB_Scene, FB_Blather)
@@ -6623,9 +6639,11 @@ void SceneRay(PyMOLGlobals * G,
 
         if(ortho) {
           const float _1 = 1.0F;
-          RayPrepare(ray, -width, width, -height, height, I->FrontSafe, I->BackSafe, fov, I->Pos, rayView, I->RotMatrix, aspRat, ray_width, ray_height, pixel_scale_value, ortho, _1, _1,       /* gcc 3.2.3 blows chunks if these are 1.0F */
+          RayPrepare(ray, -width, width, -height, height, I->FrontSafe,
+                     I->BackSafe, fov,  I->Pos, rayView, I->RotMatrix,
+                     aspRat, ray_width, ray_height, 
+                     pixel_scale_value, ortho, _1, _1,      
                      ((float) ray_height) / I->Height);
-
         } else {
           float back_ratio;
           float back_height;
@@ -6938,6 +6956,40 @@ void SceneRay(PyMOLGlobals * G,
           I->Image->size *= 2;
         }
         break;
+      case cStereo_anaglyph:
+        {
+          int big_endian;
+          
+          {
+            unsigned int test;
+            unsigned char *testPtr;
+            test = 0xFF000000;
+            testPtr = (unsigned char *) &test;
+            big_endian = (*testPtr) && 1;
+          }
+
+          {
+            unsigned int *l = (unsigned int *) stereo_image->data;
+            unsigned int *r = (unsigned int *) I->Image->data;
+            register int height, width;
+            register int a, b;
+            height = I->Image->height;
+            width = I->Image->width;
+            
+            for(a = 0; a < height; a++) {
+              for(b = 0; b < width; b++) {
+                if(big_endian) {
+                  *r = (*l & 0x00FFFFFF) | (*r & 0xFF000000);
+                } else {
+                  *r = (*l & 0xFFFFFF00) | (*r & 0x000000FF); /* not yet tested */
+                }
+                l++;
+                r++;
+              }
+            }
+          }
+        }
+        break;
       case cStereo_stencil_by_row:
       case cStereo_stencil_by_column:
       case cStereo_stencil_checkerboard:
@@ -6950,6 +7002,13 @@ void SceneRay(PyMOLGlobals * G,
           unsigned int *r;
           register int height, width;
           register int a, b;
+          int parity = 0;
+
+          if(I->StereoMode == cStereo_stencil_by_row) {
+            parity = I->StencilParity;
+            if(I->Block->rect.bottom & 0x1)
+              parity = 1 - parity;
+          }
 
           l = (unsigned int *) stereo_image->data;
           r = (unsigned int *) I->Image->data;
@@ -6961,7 +7020,7 @@ void SceneRay(PyMOLGlobals * G,
             for(b = 0; b < width; b++) {
               switch (I->StereoMode) {
               case cStereo_stencil_by_row:
-                if(a & 0x1) {
+                if((a + parity) & 0x1) {
                   *(q++) = *(l++);
                   r++;
                 } else {
@@ -6992,7 +7051,7 @@ void SceneRay(PyMOLGlobals * G,
           }
           FreeP(I->Image->data);
           I->Image->data = merged_image;
-        }
+        }   
         break;
       }
     }
@@ -7110,6 +7169,19 @@ static void SceneObjectUpdateSpawn(PyMOLGlobals * G, CObjectUpdateThreadInfo * T
 }
 #endif
 
+static void SceneStencilCheck(PyMOLGlobals *G) 
+{
+  register CScene *I = G->Scene;
+  if( I->StereoMode == cStereo_stencil_by_row ) {
+    int bottom = p_glutGet(P_GLUT_WINDOW_Y) + p_glutGet(P_GLUT_WINDOW_HEIGHT);
+    int parity = bottom & 0x1;
+    if(parity != I->StencilParity) {
+      I->StencilValid = false;
+      I->StencilParity = parity;
+      SceneDirty(G);
+    }
+  }
+}
 
 /*========================================================================*/
 void SceneUpdate(PyMOLGlobals * G, int force)
@@ -7126,13 +7198,27 @@ void SceneUpdate(PyMOLGlobals * G, int force)
   WizardDoPosition(G, false);
   WizardDoView(G, false);
   EditorUpdate(G);
+  SceneStencilCheck(G);
   if(defer_builds_mode == 0) {
     if(SettingGetGlobal_i(G, cSetting_draw_mode) == -2) {
       defer_builds_mode = 1;
     }
   }
+  /*
+  if(defer_builds_mode) {
+    rec = NULL;
+    while(ListIterate(I->Obj, rec, next)) {
+      if(ObjectGetCurrentState(rec->obj, false) != cur_state) {
+        force = true;  
+        break;
+      }
+    }
+  }
+*/
+
   if(force || I->ChangedFlag || ((cur_state != I->LastStateBuilt) &&
                                  (defer_builds_mode > 0))) {
+
     SceneCountFrames(G);
 
     if(force || (defer_builds_mode != 5)) {     /* mode 5 == immediate mode */
@@ -7296,7 +7382,7 @@ int SceneRenderCached(PyMOLGlobals * G)
   register CScene *I = G->Scene;
   ImageType *image;
   int renderedFlag = false;
-
+  int draw_mode = SettingGetGlobal_i(G, cSetting_draw_mode);
   PRINTFD(G, FB_Scene)
     " SceneRenderCached: entered.\n" ENDFD;
 
@@ -7320,10 +7406,15 @@ int SceneRenderCached(PyMOLGlobals * G)
         SceneMakeMovieImage(G, true, false, cSceneImage_Default);
         renderedFlag = true;
       }
+    } else if(draw_mode == 3) {
+      int show_progress = SettingSetGlobal_i(G,cSetting_show_progress,0);
+      SceneRay(G, 0, 0, (int) SettingGet(G, cSetting_ray_default_renderer),
+               NULL, NULL, 0.0F, 0.0F, false, NULL, false, -1);
+      SettingSetGlobal_i(G,cSetting_show_progress, show_progress);
     } else if(moviePlaying && SettingGetGlobal_b(G, cSetting_ray_trace_frames)) {
       SceneRay(G, 0, 0, (int) SettingGet(G, cSetting_ray_default_renderer),
                NULL, NULL, 0.0F, 0.0F, false, NULL, true, -1);
-    } else if(moviePlaying && SettingGetGlobal_b(G, cSetting_draw_frames)) {
+    } else if((moviePlaying && SettingGetGlobal_b(G, cSetting_draw_frames)) || (draw_mode == 2)) {
       SceneMakeSizedImage(G, 0, 0, SettingGetGlobal_i(G, cSetting_antialias));
     } else if(I->CopyType == true) {    /* true vs. 2 */
       renderedFlag = true;
@@ -7418,6 +7509,14 @@ float SceneGetReflectScaleValue(PyMOLGlobals * G, int limit)
   return result;
 }
 
+static void white4f(float *rgba, float value)
+{
+  rgba[0] = value;
+  rgba[1] = value;
+  rgba[2] = value;
+  rgba[3] = 1.0F;
+}
+
 static void SceneProgramLighting(PyMOLGlobals * G)
 {
 
@@ -7425,7 +7524,6 @@ static void SceneProgramLighting(PyMOLGlobals * G)
      MODELVIEW still has the identity */
   int n_light = SettingGetGlobal_i(G, cSetting_light_count);
   float direct = SettingGetGlobal_f(G, cSetting_direct);
-  float f;
   float vv[4];
   float reflect =
     SceneGetReflectScaleValue(G, 8) * SettingGetGlobal_f(G, cSetting_reflect);
@@ -7549,40 +7647,31 @@ static void SceneProgramLighting(PyMOLGlobals * G)
 
   /* ambient lighting */
 
-  f = SettingGet(G, cSetting_ambient);
-  vv[0] = f;
-  vv[1] = f;
-  vv[2] = f;
-  vv[3] = 1.0F;
+  white4f(vv, SettingGet(G, cSetting_ambient));
   glLightModelfv(GL_LIGHT_MODEL_AMBIENT, vv);
 
   /* LIGHT0 is our direct light (eminating from the camera -- minus Z) */
 
   if(direct > R_SMALL4) {
-
+    
     glEnable(GL_LIGHT0);
-
+    
     vv[0] = 0.0F;
     vv[1] = 0.0F;
     vv[2] = 0.0F;
     vv[3] = 1.0F;
     glLightfv(GL_LIGHT0, GL_AMBIENT, vv);
-
-    vv[0] = direct;
-    vv[1] = direct;
-    vv[2] = direct;
-    vv[3] = 1.0F;
+    
+    white4f(vv, direct);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, vv);
 
     {
       float spec_direct = SettingGet(G, cSetting_spec_direct);
       float spec[4] = { 0.0F, 0.0F, 0.0F, 1.0F };
       if(spec_direct < 0.0F) {
-        spec[0] = spec[1] = spec[2] = spec_value;
-        spec[3] = 1.0F;
+        white4f(spec, spec_value);
       } else if(spec_direct > 0.0F) {
-        spec[0] = spec[1] = spec[2] = spec_direct;
-        spec[3] = 1.0F;
+        white4f(spec, spec_direct);
       }
       glLightfv(GL_LIGHT0, GL_SPECULAR, spec);
     }
@@ -7602,11 +7691,8 @@ static void SceneProgramLighting(PyMOLGlobals * G)
       int spec_count = SettingGetGlobal_i(G, cSetting_spec_count);
       if(spec_count < 0)
         spec_count = SettingGetGlobal_i(G, cSetting_light_count);
-
-      spec[0] = spec[1] = spec[2] = spec_value;
-      spec[3] = 1.0F;
-      diff[0] = diff[1] = diff[2] = reflect;
-      diff[3] = 1.0F;
+      white4f(spec, spec_value);
+      white4f(diff, reflect);
       glEnable(GL_LIGHT1);
       if(spec_count >= 1) {
         glLightfv(GL_LIGHT1, GL_SPECULAR, spec);
@@ -7693,7 +7779,8 @@ static void SceneProgramLighting(PyMOLGlobals * G)
   }
 
   {
-    float ones[4] = { 1.0F, 1.0F, 1.0F, 1.0F };
+    float ones[4];
+    white4f(ones, 1.0F);
     glMaterialfv(GL_FRONT, GL_SPECULAR, ones);
   }
 
@@ -7939,7 +8026,6 @@ void sharp3d_switch_to_right_stereo(void);
 void sharp3d_end_stereo(void);
 #endif
 
-
 /*========================================================================*/
 void SceneRender(PyMOLGlobals * G, Picking * pick, int x, int y,
                  Multipick * smp, int oversize_width, int oversize_height,
@@ -8079,15 +8165,18 @@ void SceneRender(PyMOLGlobals * G, Picking * pick, int x, int y,
 
         {
           int h = viewport[3], w = viewport[2];
+
+
           glLineWidth(1.0);
           switch (stereo_mode) {
           case cStereo_stencil_by_row:
             {
+              int parity = I->StencilParity;
               int y;
               glBegin(GL_LINES);
               for(y = 0; y < h; y += 2) {
-                glVertex2i(0, y);
-                glVertex2i(w, y);
+                glVertex2i(0, y + parity);
+                glVertex2i(w, y + parity);
               }
               glEnd();
             }
@@ -8207,7 +8296,8 @@ void SceneRender(PyMOLGlobals * G, Picking * pick, int x, int y,
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    SceneProgramLighting(G);    /* must be done with identity MODELVIEW */
+    /* must be done with identity MODELVIEW */
+    SceneProgramLighting(G);
 
     ScenePrepareUnitContext(&context, I->Width, I->Height);
 
@@ -8619,7 +8709,8 @@ void SceneRender(PyMOLGlobals * G, Picking * pick, int x, int y,
 #endif
               break;
             case cStereo_anaglyph:
-              glClear(GL_ACCUM_BUFFER_BIT);
+              /* glClear(GL_ACCUM_BUFFER_BIT); */
+              glColorMask(true, false, false, true);
               break;
             case cStereo_clone_dynamic:
               glClear(GL_ACCUM_BUFFER_BIT);
@@ -8763,7 +8854,8 @@ void SceneRender(PyMOLGlobals * G, Picking * pick, int x, int y,
 #endif
               break;
             case cStereo_anaglyph:
-              glAccum(GL_ACCUM, 0.5);
+              /* glAccum(GL_ACCUM, 0.5); */
+              glColorMask(false, true, true, true);
               glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
               break;
             case cStereo_clone_dynamic:
@@ -8871,8 +8963,9 @@ void SceneRender(PyMOLGlobals * G, Picking * pick, int x, int y,
 #endif
               break;
             case cStereo_anaglyph:
-              glAccum(GL_ACCUM, 0.5);
-              glAccum(GL_RETURN, 1.0);
+              glColorMask(true, true, true, true);
+              /*              glAccum(GL_ACCUM, 0.5);
+                              glAccum(GL_RETURN, 1.0); */
               OrthoDrawBuffer(G, GL_BACK_LEFT);
               break;
             case cStereo_clone_dynamic:

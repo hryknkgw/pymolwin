@@ -31,7 +31,7 @@ Z* -------------------------------------------------------------------
 
 static const float kR_SMALL4 = 0.0001F;
 static const float kR_SMALL5 = 0.0001F;
-#define EPSILON 0.000001
+#define EPSILON 0.000001F
 
 
 /*========================================================================*/
@@ -1578,22 +1578,22 @@ __inline__
 #endif
 int BasisHitPerspective(BasisCallRec * BC)
 {
-  register CBasis *BI = BC->Basis;
-  register MapType *map = BI->Map;
-  register int iMin0 = map->iMin[0];
-  register int iMin1 = map->iMin[1];
-  register int iMin2 = map->iMin[2];
-  register int iMax0 = map->iMax[0];
-  register int iMax1 = map->iMax[1];
-  register int iMax2 = map->iMax[2];
-  register int a, b, c;
+  CBasis *BI = BC->Basis;
+  MapType *map = BI->Map;
+  int iMin0 = map->iMin[0];
+  int iMin1 = map->iMin[1];
+  int iMin2 = map->iMin[2];
+  int iMax0 = map->iMax[0];
+  int iMax1 = map->iMax[1];
+  int iMax2 = map->iMax[2];
+  int a, b, c;
 
-  register float iDiv = map->recipDiv;
-  register float base0, base1, base2;
+  float iDiv = map->recipDiv;
+  float base0, base1, base2;
 
-  register float min0 = map->Min[0] * iDiv;
-  register float min1 = map->Min[1] * iDiv;
-  register float min2 = map->Min[2] * iDiv;
+  float min0 = map->Min[0] * iDiv;
+  float min1 = map->Min[1] * iDiv;
+  float min2 = map->Min[2] * iDiv;
 
   int new_ray = !BC->pass;
   RayInfo *r = BC->rr;
@@ -1627,12 +1627,12 @@ int BasisHitPerspective(BasisCallRec * BC)
   }
 
   {
-    register int last_a = -1, last_b = -1, last_c = -1;
-    register int allow_break;
-    register int minIndex = -1;
+    int last_a = -1, last_b = -1, last_c = -1;
+    int allow_break;
+    int minIndex = -1;
 
-    register float step0, step1, step2;
-    register float back_dist = BC->back_dist;
+    float step0, step1, step2;
+    float back_dist = BC->back_dist;
 
     const float _0 = 0.0F, _1 = 1.0F;
     float r_tri1 = _0, r_tri2 = _0, r_dist, dist;       /* zero inits to suppress compiler warnings */
@@ -1655,10 +1655,10 @@ int BasisHitPerspective(BasisCallRec * BC)
     int except2 = BC->except2;
     int check_interior_flag = BC->check_interior && !BC->pass;
     float sph[3], vt[3], tri1 = _0, tri2;
-    register CPrimitive *BC_prim = BC->prim;
-    register int *BI_Vert2Normal = BI->Vert2Normal;
-    register float *BI_Vertex = BI->Vertex;
-    register float *BI_Precomp = BI->Precomp;
+    CPrimitive *BC_prim = BC->prim;
+    int *BI_Vert2Normal = BI->Vert2Normal;
+    float *BI_Vertex = BI->Vertex;
+    float *BI_Precomp = BI->Precomp;
     float *BI_Normal = BI->Normal;
     float *BI_Radius = BI->Radius;
     float *BI_Radius2 = BI->Radius2;
@@ -1678,7 +1678,7 @@ int BasisHitPerspective(BasisCallRec * BC)
     MapCacheReset(cache);
 
     {                           /* take steps with a Z-size equil to the grid spacing */
-      register float div = iDiv * (-MapGetDiv(BI->Map) / r->dir[2]);
+      float div = iDiv * (-MapGetDiv(BI->Map) / r->dir[2]);
       step0 = r->dir[0] * div;
       step1 = r->dir[1] * div;
       step2 = r->dir[2] * div;
@@ -1691,7 +1691,7 @@ int BasisHitPerspective(BasisCallRec * BC)
     allow_break = false;
     while(1) {
       int inside_code;
-      register int clamped;
+      int clamped;
 
       a = ((int) base0);
       b = ((int) base1);
@@ -1735,7 +1735,6 @@ int BasisHitPerspective(BasisCallRec * BC)
           clamped = true;
         }
       }
-
       if(c < iMin2) {
         if((iMin2 - c) > EDGE_ALLOWANCE)
           break;
@@ -1752,8 +1751,8 @@ int BasisHitPerspective(BasisCallRec * BC)
         }
       }
       if(inside_code && (((a != last_a) || (b != last_b) || (c != last_c)))) {
-        register int new_min_index;
-        h = *(ehead + (a * d1d2) + (b * d2) + c);
+        int new_min_index;
+        h = *(ehead + (d1d2 * a) + (d2 * b) + c);
 
         new_min_index = -1;
 
@@ -1775,16 +1774,17 @@ int BasisHitPerspective(BasisCallRec * BC)
           last_c = c;
 
           while(do_loop) {      /* n_vert checking is a bug workaround */
-            ii = *(ip++);
+            CPrimitive *prm;
             v2p = vert2prim[i];
+            ii = *(ip++);
+            prm = BC_prim + v2p;
             do_loop = ((ii >= 0) && (ii < n_vert));
-            if((v2p != except1) && (v2p != except2) && (!MapCached(cache, v2p))) {
-              register CPrimitive *prm = BC_prim + v2p;
-              int prm_type;
+            /*            if((v2p != except1) && (v2p != except2) && (!MapCached(cache, v2p))) { */
+            if((v2p != except1) && (v2p != except2) && (!cache_cache[v2p])) {
+              int prm_type = prm->type;
 
               /*MapCache(cache,v2p); */
               cache_cache[v2p] = 1;
-              prm_type = prm->type;
               cache_CacheLink[v2p] = cache->CacheStart;
               cache->CacheStart = v2p;
 
@@ -1795,6 +1795,7 @@ int BasisHitPerspective(BasisCallRec * BC)
                   float *dir = r->dir;
                   float *d10 = BI_Precomp + BI_Vert2Normal[i] * 3;
                   float *d20 = d10 + 3;
+                  float *v0;
                   register float det, inv_det;
                   register float pvec0, pvec1, pvec2;
                   register float dir0 = dir[0], dir1 = dir[1], dir2 = dir[2];
@@ -1811,8 +1812,8 @@ int BasisHitPerspective(BasisCallRec * BC)
 
                   det = pvec0 * d10_0 + pvec1 * d10_1 + pvec2 * d10_2;
 
-                  if(fabs(det) >= EPSILON) {
-                    float *v0 = BI_Vertex + prm->vert * 3;
+                  v0 = BI_Vertex + prm->vert * 3;
+                  if((det >= EPSILON) || (det <= -EPSILON)) {
                     register float tvec0, tvec1, tvec2;
                     register float qvec0, qvec1, qvec2;
 
@@ -3135,45 +3136,48 @@ void BasisMakeMap(CBasis * I, int *vert2prim, CPrimitive * prim, int n_prim,
    * require expanding the map cutoff to the size of the largest object*/
   if(remapMode) {
     register int a, b, c;
-
+    
     if(sep < size_hint)         /* this keeps us from wasting time & memory on unnecessary subdivision */
       sep = size_hint;
+    
+    {
+      register int *vert2prim_a = vert2prim;
+      for(a = 0; a < I->NVertex; a++) {
+        prm = prim + *(vert2prim_a++);
 
-    for(a = 0; a < I->NVertex; a++) {
-      prm = prim + vert2prim[a];
-
-      switch (prm->type) {
-      case cPrimTriangle:
-      case cPrimCharacter:
-        if(a == prm->vert) {    /* only do this calculation for one of the three vertices */
-          l1 = (float) length3f(I->Precomp + I->Vert2Normal[a] * 3);
-          l2 = (float) length3f(I->Precomp + I->Vert2Normal[a] * 3 + 3);
-          if((l1 >= sep) || (l2 >= sep)) {
-            b = (int) ceil(l1 / sep) + 1;
-            c = (int) ceil(l2 / sep) + 1;
-            extra_vert += 4 * b * c;
+        switch (prm->type) {
+        case cPrimTriangle:
+        case cPrimCharacter:
+          if(a == prm->vert) {    /* only do this calculation for one of the three vertices */
+            l1 = (float) length3f(I->Precomp + I->Vert2Normal[a] * 3);
+            l2 = (float) length3f(I->Precomp + I->Vert2Normal[a] * 3 + 3);
+            if((l1 >= sep) || (l2 >= sep)) {
+              b = (int) ceil(l1 / sep) + 1;
+              c = (int) ceil(l2 / sep) + 1;
+              extra_vert += 4 * b * c;
+            }
           }
-        }
-        break;
+          break;
 
-      case cPrimCone:
-      case cPrimCylinder:
-      case cPrimSausage:
-        if((prm->l1 + 2 * prm->r1) >= sep) {
-          q = ((int) (2 * (floor(prm->r1 / sep) + 1))) + 1;
-          q = q * q * ((int) ceil((prm->l1 + 2 * prm->r1) / sep) + 2);
-          extra_vert += q;
+        case cPrimCone:
+        case cPrimCylinder:
+        case cPrimSausage:
+          if((prm->l1 + 2 * prm->r1) >= sep) {
+            q = ((int) (2 * (floor(prm->r1 / sep) + 1))) + 1;
+            q = q * q * ((int) ceil((prm->l1 + 2 * prm->r1) / sep) + 2);
+            extra_vert += q;
+          }
+          break;
+        case cPrimEllipsoid:
+        case cPrimSphere:
+          if(prm->r1 >= sep) {
+            b = (int) (2 * floor(prm->r1 / sep) + 1);
+            extra_vert += (b * b * b);
+          }
+          break;
         }
-        break;
-      case cPrimEllipsoid:
-      case cPrimSphere:
-        if(prm->r1 >= sep) {
-          b = (int) (2 * floor(prm->r1 / sep) + 1);
-          extra_vert += (b * b * b);
-        }
-        break;
-      }
-    }                           /* for */
+      }                           /* for */
+    }
 
     extra_vert += I->NVertex;
     tempVertex =
@@ -3187,6 +3191,8 @@ void BasisMakeMap(CBasis * I, int *vert2prim, CPrimitive * prim, int n_prim,
 
     {
       register float *vv, *d;
+      int *vert2prim_a = vert2prim;
+
       n = I->NVertex;
 
       v = tempVertex;
@@ -3198,7 +3204,7 @@ void BasisMakeMap(CBasis * I, int *vert2prim, CPrimitive * prim, int n_prim,
 
       for(a = 0; a < I->NVertex; a++) {
 
-        prm = prim + vert2prim[a];
+        prm = prim + *(vert2prim_a++);
 
         switch (prm->type) {
         case cPrimTriangle:
