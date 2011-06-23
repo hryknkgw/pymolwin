@@ -1,5 +1,4 @@
 
-
 import sys, string
 import re
 import threading
@@ -530,6 +529,8 @@ class Normal(PMGSkin):
             ofile_list = askopenfilename(initialdir = initdir,
                                          filetypes=ftypes,
                                          multiple=1) # new option in Tk 8.4
+            # work around Python/Tk bug http://bugs.python.org/issue5712
+            if isinstance(ofile_list, basestring): ofile_list = self.root.splitlist(ofile_list)
         else:
             ofile_list = [ askopenfilename(initialdir = initdir,
                                          filetypes=ftypes) ]
