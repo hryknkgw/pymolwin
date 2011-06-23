@@ -1,4 +1,4 @@
- #!/usr/bin/env python
+#!/usr/bin/env python
 #
 # This script only applies if you are performing a Python Distutils-based
 # installation of PyMOL.
@@ -9,22 +9,50 @@
 from distutils.core import setup, Extension
 import sys, os
 
+def get_data_files(parent_name):
+    ret = []
+    for child_name in os.listdir(parent_name):
+        fullpath = os.path.join(parent_name, child_name)
+        if os.path.isfile(fullpath):
+            ret.append((os.path.join("Lib/site-packages/pymol/pymol_path", parent_name), [os.path.join(parent_name, child_name)]))
+        else:
+            ret += get_data_files(fullpath)
+    return ret
+
+data_files = get_data_files("data") + get_data_files("scripts") + get_data_files("examples")
+data_files.append(("Lib/site-packages/pymol/pymol_path", ["LICENSE"]))
+
 #============================================================================
 if sys.platform=='win32': 
     # NOTE: this branch not tested in years and may not work...
     inc_dirs=["ov/src",
               "layer0","layer1","layer2",
               "layer3","layer4","layer5",
+              "contrib/opengl/include",
+              "contrib/freeglut/include",
+              "contrib/freetype/include",
+              "contrib/libpng",
+              "contrib/zlib",
               "win32/include"]
-    libs=["opengl32","glu32","glut32","libpng","zlib"]
-    pyogl_libs = ["opengl32","glu32","glut32"]
-    lib_dirs=["win32/lib"]
+    libs=["opengl32","glu32","freeglut","libpng","zlib","freetype"]
+    pyogl_libs = ["opengl32","glu32","freeglut"]
+    lib_dirs=["contrib/freeglut/Release",
+              "contrib/freetype/objs/release",
+              "contrib/libpng/projects/visualc71/Win32_DLL_Release",
+              "contrib/zlib/contrib/vstudio/vc9/x86/ZlibDllRelease",
+              "win32/lib"]
     def_macros=[("_PYMOL_MODULE",None),
                 ("WIN32",None),
                 ("_PYMOL_LIBPNG",None),
-                ]
+                ("_PYMOL_FREETYPE",None),
+                ("_PYMOL_OPENGL_SHADERS",None)]
     ext_comp_args=[]
     ext_link_args=['/NODEFAULTLIB:"LIBC"']
+    data_files.append(("Lib/site-packages/pymol", 
+    				   ["contrib/freeglut/Release/freeglut.dll",
+                        "contrib/freetype/objs/release/freetype.dll",
+                        "contrib/libpng/projects/visualc71/Win32_DLL_Release/libpng.dll",
+                        "contrib/zlib/contrib/vstudio/vc9/x86/ZlibDllRelease/zlib.dll"]))
 #============================================================================
 elif sys.platform=='cygwin':
     # NOTE: this branch not tested in years and may not work...
@@ -445,8 +473,9 @@ setup ( # Distribution meta-data
               libraries = pyogl_libs,
               library_dirs = lib_dirs,
               define_macros = def_macros
-              )
-])
+              )],
+    data_files = data_files
+)
 
 print '''
  After running:

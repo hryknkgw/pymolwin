@@ -55,6 +55,7 @@ typedef float aliased_float;
 
 #ifndef _PYMOL_MINGW
 #ifdef _WIN32
+/*
 #ifndef _AFXDLL
 #ifndef _UNICODE
 #ifdef _DEBUG
@@ -110,7 +111,7 @@ typedef float aliased_float;
 #endif
 #endif
 #endif
-
+*/
 #pragma comment(lib, "kernel32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -123,19 +124,19 @@ typedef float aliased_float;
 
 /* force inclusion of NOLIB.OBJ for /disallowlib directives */
 #ifndef _PYMOL_PYOMM
-#pragma comment(linker, "/include:__afxForceEXCLUDE")
+/* #pragma comment(linker, "/include:__afxForceEXCLUDE") */
 #endif
 
 
 /* force inclusion of DLLMODUL.OBJ for _USRDLL */
 #ifdef _USRDLL
-#pragma comment(linker, "/include:__afxForceUSRDLL")
+/* #pragma comment(linker, "/include:__afxForceUSRDLL") */
 #endif
 
 
 /* force inclusion of STDAFX.OBJ for precompiled types */
 #ifdef _AFXDLL
-#pragma comment(linker, "/include:__afxForceSTDAFX")
+/* #pragma comment(linker, "/include:__afxForceSTDAFX") */
 #endif
 
 #endif
