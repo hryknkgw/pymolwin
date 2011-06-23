@@ -33,7 +33,9 @@ if sys.platform=='win32':
               "contrib/freetype/include",
               "contrib/libpng",
               "contrib/zlib",
-              "win32/include"]
+              "win32/include",
+			  "modules/cealign/src",
+			  "modules/cealign/src/tnt"]
     libs=["opengl32","glu32","freeglut","libpng","zlib","freetype"]
     pyogl_libs = ["opengl32","glu32","freeglut"]
     lib_dirs=["contrib/freeglut/Release",
