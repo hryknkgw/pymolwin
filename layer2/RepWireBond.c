@@ -479,7 +479,6 @@ static void RepWireBondRender(RepWireBond * I, RenderInfo * info)
   unsigned int i, j;
   Pickable *p;
   float line_width = SceneGetDynamicLineWidth(info, I->Width);
-  CShaderPrg * prg = CShaderMgr_GetShaderPrg(G->ShaderMgr, "default");
 
   if(ray) {
 
@@ -557,12 +556,6 @@ static void RepWireBondRender(RepWireBond * I, RenderInfo * info)
     } else {
       int use_dlst;
       register int nvidia_bugs = (int) SettingGet(G, cSetting_nvidia_bugs);
-      int use_shader = (int) SettingGet(G, cSetting_line_use_shader) & 
-	               (int) SettingGet(G, cSetting_use_shaders);
-      if (use_shader) {
-	/*	ShaderEnable(G);*/
-	CShaderPrg_Enable(prg);
-      }
 
       use_dlst = (int) SettingGet(G, cSetting_use_display_lists);
 
@@ -616,10 +609,6 @@ static void RepWireBondRender(RepWireBond * I, RenderInfo * info)
         if(use_dlst && I->R.displayList) {
           glEndList();
         }
-	if (use_shader) {
-	  /*ShaderDisable(G);*/
-	  CShaderPrg_Disable(prg);
-	}
       }
       glEnable(GL_LIGHTING);
     }

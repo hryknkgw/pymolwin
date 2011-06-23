@@ -208,6 +208,10 @@ struct _CScene {
 
 };
 
+/* EXPERIMENTAL VOLUME RAYTRACING DATA */
+extern float *rayDepthPixels;
+extern int rayVolume;
+
 typedef struct {
   float unit_left, unit_right, unit_top, unit_bottom, unit_front, unit_back;
 } SceneUnitContext;
@@ -3836,6 +3840,7 @@ static int SceneClick(Block * block, int button, int x, int y, int mod, double w
       int i;
       SceneElem *elem = I->SceneVLA;
 
+      /* check & handle a click on the scrollbar */
       if(I->ScrollBarActive) {
         if((x - I->Block->rect.left) < (SceneScrollBarWidth + SceneScrollBarMargin)) {
           click_handled = true;
@@ -3855,7 +3860,7 @@ static int SceneClick(Block * block, int button, int x, int y, int mod, double w
     }
 
     if(!click_handled) {
-
+      /* check for double click (within 0.35s and 10sq. pixels */
       if(((ButModeCheckPossibleSingleClick(G, button, mod) || (!mod))
           && ((when - I->LastClickTime) < cDoubleTime))) {
         int dx, dy;
@@ -3875,7 +3880,7 @@ static int SceneClick(Block * block, int button, int x, int y, int mod, double w
           }
         }
       }
-    }
+    } /* end not click handled */
 
     if(ButModeCheckPossibleSingleClick(G, button, mod) || (!mod)) {
       I->PossibleSingleClick = 1;
@@ -3887,7 +3892,7 @@ static int SceneClick(Block * block, int button, int x, int y, int mod, double w
         I->PossibleSingleClick = 0;
       }
     }
-  }
+  } /* end not single-click */
 
   I->LastWinX = x;
   I->LastWinY = y;
@@ -4135,6 +4140,7 @@ static int SceneClick(Block * block, int button, int x, int y, int mod, double w
                  && SelectorIsMember(G,
                                      objMol->AtomInfo[I->LastPicked.src.index].selEntry,
                                      active_sele)) {
+		/* user clicked on a selected atom */
                 ObjectNameType name;
                 ExecutiveGetActiveSeleName(G, name, false,
                                            SettingGet(G, cSetting_logging));
@@ -4142,6 +4148,7 @@ static int SceneClick(Block * block, int button, int x, int y, int mod, double w
                                  I->LastWinX, I->LastWinY,
                                  is_single_click, "pick_sele", name, name);
               } else {
+		/* user clicked on an atom not in a selection */
                 ObjectMoleculeGetAtomSele((ObjectMolecule *) obj, I->LastPicked.src.index,
                                           buffer);
                 ObjectMoleculeGetAtomSeleLog((ObjectMolecule *) obj,
@@ -6448,6 +6455,7 @@ void SceneRay(PyMOLGlobals * G,
   CRay *ray = NULL;
   float height, width;
   float aspRat;
+  float volume_layers;
   float rayView[16];
   int curState;
   double timing;
@@ -7085,7 +7093,12 @@ void SceneRay(PyMOLGlobals * G,
     OrthoDirty(G);
   }
 
+  /* EXPERIMENTAL VOLUME CODE */
+  if (rayVolume) {
+    SceneUpdate(G, true);
+  }
 }
+
 
 
 /*========================================================================*/
@@ -7920,7 +7933,10 @@ static void SceneRenderAll(PyMOLGlobals * G, SceneUnitContext * context,
   {
     int *slot_vla = I->SlotVLA;
     while(ListIterate(I->Obj, rec, next)) {
-      if(rec->obj->fRender) {
+
+      /* EXPERIMENTAL RAY-VOLUME COMPOSITION CODE */
+      /*      if(rec->obj->fRender) { */
+      if(rec->obj->fRender && (!rayVolume || rec->obj->type==cObjectVolume)) {
 
         if(Feedback(G, FB_OpenGL, FB_Debugging))
           PyMOLCheckOpenGLErr("Before fRender iteration");
@@ -8642,12 +8658,39 @@ void SceneRender(PyMOLGlobals * G, Picking * pick, int x, int y,
       glPopMatrix();            /* 1 */
 
     } else {
-
+      int times = 1;
       /* STANDARD RENDERING */
 
       /* rendering for visualization */
 
-      int times = 1;
+/*** THIS IS AN UGLY EXPERIMENTAL 
+ *** VOLUME + RAYTRACING COMPOSITION CODE 
+ ***/
+if (rayVolume && rayDepthPixels) {
+  glMatrixMode(GL_PROJECTION);
+  glPushMatrix();
+  glLoadIdentity();
+  glOrtho(0, I->Width, 0, I->Height, -100, 100);
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
+  glLoadIdentity();
+  glRasterPos3f(0, 0, -1);
+  glDepthMask(GL_FALSE);
+  if (I->Image && I->Image->data) 
+    glDrawPixels(I->Width, I->Height, GL_RGBA, GL_UNSIGNED_BYTE, I->Image->data);
+  glDepthMask(GL_TRUE);
+  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+  glDepthFunc(GL_ALWAYS);
+  glDrawPixels(I->Width, I->Height, GL_DEPTH_COMPONENT, GL_FLOAT, rayDepthPixels); 
+  glDepthFunc(GL_LESS);
+  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glPopMatrix();
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+  glMatrixMode(GL_MODELVIEW);
+  rayVolume--;
+}
+/*** END OF EXPERIMENTAL CODE ***/
 
       switch (stereo_mode) {
       case cStereo_clone_dynamic:

@@ -895,6 +895,13 @@ CSetting *SettingNewFromPyList(PyMOLGlobals * G, PyObject * list);
 #define cSetting_default_2fofc_map_rep      659
 #define cSetting_atom_type_format           660
 #define cSetting_autoclose_dialogs          661
+#define cSetting_bg_gradient                662
+#define cSetting_bg_rgb_top                 663
+#define cSetting_bg_rgb_bottom              664
+#define cSetting_ray_volume                 665
+#define cSetting_ribbon_transparency        666  /* oh noes */
+#define cSetting_state_counter_mode         667 /* -1=as fraction; 0=off; 1=as fraction; 2=no fraction */
+
 
 /* when you add a new setting also remember:
    layer1/Setting.c
@@ -905,6 +912,6 @@ CSetting *SettingNewFromPyList(PyMOLGlobals * G, PyObject * list);
 
 /* cSetting_ss_INIT must always be last setting_index +1 */
 
-#define cSetting_INIT                       662
+#define cSetting_INIT                       668
 
 #endif

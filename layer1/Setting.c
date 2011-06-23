@@ -2434,6 +2434,7 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_ribbon_width:
   case cSetting_ribbon_throw:
   case cSetting_ribbon_trace_atoms:
+  case cSetting_ribbon_transparency:
     ExecutiveInvalidateRep(G, inv_sele, cRepRibbon, cRepInvRep);
     SceneChanged(G);
     break;
@@ -2525,10 +2526,43 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
     ExecutiveInvalidateRep(G, inv_sele, cRepDot, cRepInvRep);
     SceneChanged(G);
     break;
+  case cSetting_bg_gradient:
+    ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
+    SceneChanged(G);
+    break;
+  case cSetting_bg_rgb_top:
+    {
+      /* clamp this value */
+      float vv[3], *v = SettingGetfv(G, cSetting_bg_rgb_top);
+      if((v[0] > 1.0F) || (v[1] > 1.0F) || (v[2] > 1.0F)) {
+        vv[0] = v[0] / 255.0F;
+        vv[1] = v[1] / 255.0F;
+        vv[2] = v[2] / 255.0F;
+        SettingSet_3fv(G->Setting, cSetting_bg_rgb_top, vv);
+      }
+      ColorUpdateFront(G, v);
+    }
+    ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
+    SceneChanged(G);
+    break;
+  case cSetting_bg_rgb_bottom:
+    {
+      /* clamp this value */
+      float vv[3], *v = SettingGetfv(G, cSetting_bg_rgb_bottom);
+      if((v[0] > 1.0F) || (v[1] > 1.0F) || (v[2] > 1.0F)) {
+        vv[0] = v[0] / 255.0F;
+        vv[1] = v[1] / 255.0F;
+        vv[2] = v[2] / 255.0F;
+        SettingSet_3fv(G->Setting, cSetting_bg_rgb_bottom, vv);
+      }
+      ColorUpdateFront(G, v);
+    }
+    ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
+    SceneChanged(G);
+    break;
   case cSetting_bg_rgb:
     {
       /* clamp this value */
-
       float vv[3], *v = SettingGetfv(G, cSetting_bg_rgb);
       if((v[0] > 1.0F) || (v[1] > 1.0F) || (v[2] > 1.0F)) {
         vv[0] = v[0] / 255.0F;
@@ -3961,7 +3995,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_color(I, cSetting_volume_color, "-1");
     set_f(I, cSetting_volume_layers, 256);
     set_f(I, cSetting_volume_data_range, 5.0);
-    set_i(I, cSetting_auto_defer_atom_count, 1000);
+    set_i(I, cSetting_auto_defer_atom_count, 0);
     set_s(I, cSetting_default_refmac_names, "FWT PHWT DELFWT PHDELWT");
     set_s(I, cSetting_default_phenix_names, "2FOFCWT PH2FOFCWT FOFCWT PHFOFCWT");
     set_s(I, cSetting_default_phenix_no_fill_names, "2FOFCWT_no_fil PH2FOFCWT_no_fill None None");
@@ -3971,5 +4005,16 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_s(I, cSetting_atom_type_format, "mol2");
 
     set_b(I, cSetting_autoclose_dialogs, 1);
+
+    set_b(I, cSetting_bg_gradient, 0);
+    set_3f(I, cSetting_bg_rgb_top, 0.0F, 0.0F, 0.3F);
+    set_3f(I, cSetting_bg_rgb_bottom, 0.2F, 0.2F, 0.5F);
+
+    set_b(I, cSetting_ray_volume, 0);
+    
+    set_f(I, cSetting_ribbon_transparency, 0.0F);
+
+    set_i(I, cSetting_state_counter_mode, -1);
+
   }
 }

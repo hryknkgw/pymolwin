@@ -149,18 +149,109 @@ int ObjectMoleculeCheckFullStateSelection(ObjectMolecule * I, int sele, int stat
   return result;
 }
 
-static char *ObjectMoleculeGetCaption(ObjectMolecule * I)
+/* PARAMS
+ *   ch -- ptr to empty str of length 'len'
+ *  len -- str len 
+ * RETURNS
+ *   ch, with the caption in place
+ * NOTES
+ *   User owns the buffer so must clean up after it
+ */
+static char *ObjectMoleculeGetCaption(ObjectMolecule * I, char* ch, int len)
 {
-  int state = ObjectGetCurrentState((CObject *) I, false);
+  int objState;
+  int n = 0;
+  int show_state = 0;
+  int show_as_fraction = 0;
+  char *frozen_str = "";
 
-  if((state >= 0) && (state < I->NCSet)) {
-    CoordSet *cs = I->CSet[state];
-    if(cs) {
-      return cs->Name;
+  int state = ObjectGetCurrentState((CObject *) I, false);
+  int counter_mode = SettingGet_i(I->Obj.G, I->Obj.Setting, NULL, cSetting_state_counter_mode);
+  int frozen = SettingGetIfDefined_i(I->Obj.G, I->Obj.Setting, cSetting_state, &objState);
+
+  /* if frozen print (blue) STATE / NSTATES
+   * if not frozen, print STATE/NSTATES
+   * if beyond NSTATES, print * /NSTATES.
+   */
+
+  if(frozen) { /* frozen color */
+    frozen_str = "\\789";
+  } else {
+    if(state+1>I->NCSet) { /* beyond this object's number of states */
+      frozen_str = "--";
+    } else { /* normal case */
+      frozen_str = "";
     }
+  }
+
+  switch(counter_mode) {
+  case 0: /* off */
+    show_state = show_as_fraction = 0;
+    break;
+  case 2: /* just state */
+    show_state = 1;
+    show_as_fraction = 0;
+    break;
+  case -1: /* fraction, full-on */
+  case 1:
+  default:
+    show_state = show_as_fraction = 1;
+    break;
+  }
+
+  /* bail on null string or no room */
+  if (!ch || len==0)
+    return NULL;
+
+  /* if the state is valid, setup the label */
+  if(state >= 0) {
+    if (state < I->NCSet) {
+      CoordSet *cs = I->CSet[state];
+      if(cs) {
+	if(show_state) {
+	  if (show_as_fraction) {
+	    if (cs->Name && strlen(cs->Name)) { 	  /* NAME */
+	      n = snprintf(ch, len, "%s %s%d/%d", cs->Name, frozen_str, state+1, I->NCSet);
+	    } 
+	    else { /* no name */
+	      n = snprintf(ch, len, "%s%d/%d", frozen_str, state+1, I->NCSet);
+	    }
+	  } else { /* not fraction */
+	    if (cs->Name && strlen(cs->Name)) {
+	      n = snprintf(ch, len, "%s %s%d", cs->Name, frozen_str, state+1);
+	    } else { /* no name */
+	      n = snprintf(ch, len, "%s%d", frozen_str, state+1);
+	    }
+	  }
+	} else { /* no state */
+	  n = snprintf(ch, len, "%s", cs->Name);
+	}
+      } else { /* no coord set, can be an N-state object missing a CSet */
+	if (len && ch)
+	  ch[0] = 0;
+      }
+    } else { /* state > NCSet, out of range due to other object or global setting */
+      if(show_state) {
+	if(show_as_fraction) {
+	  n = snprintf(ch, len, "%s/%d", frozen_str, I->NCSet);
+	} else { /* no fraction */
+	  n = snprintf(ch, len, "%s", frozen_str);
+	}
+      }
+    }
+
+    if(n>len)
+      return NULL;
+    else
+      return ch;
+  } else {
+    /* blank out the title if outside the valid # of states */
+    if (len && ch)
+      ch[0] = 0;
   }
   return NULL;
 }
+
 
 int ObjectMoleculeGetMatrix(ObjectMolecule * I, int state, double **history)
 {
@@ -3070,9 +3161,16 @@ void ObjectMoleculeRenderSele(ObjectMolecule * I, int curState, int sele, int vi
   register int all_vis = !vis_only;
   register signed char *visRep;
   float tmp_matrix[16], v_tmp[3], *matrix = NULL;
+
+  int objState;
+  int frozen = SettingGetIfDefined_i(I->Obj.G, I->Obj.Setting, cSetting_state, &objState);
+
   register int use_matrices =
     SettingGet_i(I->Obj.G, I->Obj.Setting, NULL, cSetting_matrix_mode);
   if(use_matrices<0) use_matrices = 0;
+
+  if(frozen)
+    curState = objState - 1;
 
   if(G->HaveGUI && G->ValidContext) {
     register AtomInfoType *atInfo = I->AtomInfo, *ai;
@@ -11682,7 +11780,7 @@ void ObjectMoleculeUpdate(ObjectMolecule * I)
 
 AtomInfoType *get_atom_info_type(ObjectMolecule *obj, int state, int idx){
   int atm;
-  if (state>=0 && state < obj->NCSet){   
+  if (state>=0 && state < obj->NCSet && obj->CSet[state] && obj->CSet[state]->NIndex > idx){   
     atm = obj->CSet[state]->IdxToAtm[idx];
     return &obj->AtomInfo[atm];
   } else {
@@ -12303,7 +12401,7 @@ ObjectMolecule *ObjectMoleculeNew(PyMOLGlobals * G, int discreteFlag)
   I->Obj.fGetObjectState = (CObjectState * (*)(CObject *, int state))
     ObjectMoleculeGetObjectState;
 
-  I->Obj.fGetCaption = (char *(*)(CObject *)) ObjectMoleculeGetCaption;
+  I->Obj.fGetCaption = (char *(*)(CObject *, char *, int)) ObjectMoleculeGetCaption;
   I->AtomInfo = VLAMalloc(10, sizeof(AtomInfoType), 2, true);   /* autozero here is important */
   I->CurCSet = 0;
   I->Symmetry = NULL;

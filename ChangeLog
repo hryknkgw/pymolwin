@@ -2,6 +2,59 @@
 CHANGE LOG
 =========================================================================
 
+2011-05-02 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed shader bug
+
+	* v1.4.1 release
+
+2011-04-20 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* finished the state counter
+
+	* all measures now work inter-distance, and
+	  honor object states
+
+	* selecting/picking now works as we'd expect, with 
+	  respect to states
+
+	* improved shaders; added fog, fixed rendering issues
+
+	* bug fix for possible crash
+
+2011-04-20 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* freezing colors the states blue
+
+	* added out of bounds checks for showing states; those
+	  beyond are shown as "--"
+
+2011-04-20 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* state_counter_mode
+
+	* fixed bg_gradient coloring
+
+	* added small dictionary for xray space groups
+
+	* get_names and safe names 
+
+2011-04-01 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* transparent ribbons
+
+	* naive volume ray tracing; better version coming soon
+
+	* small bug fixes
+
+2011-04-01 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* introducing gradient backgrounds (non-ray tracing; testing)
+
+	* Windows bug fixes
+
+	* Rlight-click Volumes fix
+
 2011-04-01 Jason Vertrees <Jason.Vertrees@schrodinger.com>
 
 	* PyMOL v1.4b1 -- adds volumes, glew, shaders, bug fixes, etc
