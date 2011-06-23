@@ -31,29 +31,33 @@ if sys.platform=='win32':
               "contrib/opengl/include",
               "contrib/freeglut/include",
               "contrib/freetype/include",
+              "contrib/glew/include",
               "contrib/libpng",
               "contrib/zlib",
               "win32/include",
 			  "modules/cealign/src",
 			  "modules/cealign/src/tnt"]
-    libs=["opengl32","glu32","freeglut","libpng","zlib","freetype"]
-    pyogl_libs = ["opengl32","glu32","freeglut"]
+    libs=["opengl32","glu32","freeglut","libpng","zlib","freetype","glew32"]
+    pyogl_libs = ["opengl32","glu32","freeglut","glew32"]
     lib_dirs=["contrib/freeglut/Release",
               "contrib/freetype/objs/release",
-              "contrib/libpng/projects/visualc71/Win32_DLL_Release",
+              "contrib/glew/lib",
+    		  "contrib/libpng/projects/visualc71/Win32_DLL_Release",
               "contrib/zlib/contrib/vstudio/vc9/x86/ZlibDllRelease",
               "win32/lib"]
     def_macros=[("_PYMOL_MODULE",None),
                 ("WIN32",None),
                 ("_PYMOL_LIBPNG",None),
                 ("_PYMOL_FREETYPE",None),
-                ("_PYMOL_OPENGL_SHADERS",None)]
+                ("_PYMOL_OPENGL_SHADERS",None),
+                ("NO_MMLIBS",None),]
     ext_comp_args=[]
     ext_link_args=['/NODEFAULTLIB:"LIBC"']
     data_files.append(("Lib/site-packages/pymol", 
     				   ["contrib/freeglut/Release/freeglut.dll",
                         "contrib/freetype/objs/release/freetype.dll",
-                        "contrib/libpng/projects/visualc71/Win32_DLL_Release/libpng.dll",
+                        "contrib/glew/bin/glew32.dll",
+    				    "contrib/libpng/projects/visualc71/Win32_DLL_Release/libpng.dll",
                         "contrib/zlib/contrib/vstudio/vc9/x86/ZlibDllRelease/zlib.dll"]))
 #============================================================================
 elif sys.platform=='cygwin':

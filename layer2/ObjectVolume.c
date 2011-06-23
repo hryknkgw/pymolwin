@@ -22,8 +22,8 @@ Z* -------------------------------------------------------------------
 #include<math.h>
 
 #if defined(_WIN32) || defined(_WIN64)
-#define fmax max
-#define fmin min
+#define fmax(a,b) (((a) > (b)) ? (a) : (b))
+#define fmin(a,b) (((a) < (b)) ? (a) : (b))
 #pragma warning (disable:4996)
 #define snprintf sprintf_s
 #endif

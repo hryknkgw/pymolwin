@@ -23,7 +23,7 @@
 #ifdef WIN32
 #include <signal.h>
 #include <tchar.h>
-#include <stdafx.h>
+//#include <stdafx.h>
 #endif
 
 /* END PROPRIETARY CODE SEGMENT */

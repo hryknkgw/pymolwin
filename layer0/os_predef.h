@@ -53,6 +53,20 @@ typedef float aliased_float;
 #define __inline__ __inline
 #endif
 
+#ifndef _PYMOL_MINGW
+#ifdef _WIN32
+
+#pragma comment(lib, "kernel32.lib")
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "comdlg32.lib")
+#pragma comment(lib, "winspool.lib")
+#pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "comctl32.lib")
+
+#endif
+#endif
 
 
 /* commercial product */
