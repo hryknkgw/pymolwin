@@ -65,7 +65,7 @@ def posix_find_lib(names, lib_dirs):
 
 class install_pymol(install):
     pymol_path = None
-    bundled_pmw = False
+    bundled_pmw = True
     user_options = install.user_options + [
         ('pymol-path=', None, 'PYMOL_PATH'),
         ('bundled-pmw', None, 'install bundled Pmw module'),
@@ -84,10 +84,9 @@ class install_pymol(install):
         self.make_launch_script()
 
         if self.bundled_pmw:
-            os.system("tar -C %s -zxvf modules/pmg_tk/pmw.tgz" % self.install_libbase)
+            os.system("tar -C %s -zxvf modules/pmg_tk/pmw.tgz" % self.install_libbase.replace(os.sep, "/"))
 
     def unchroot(self, name):
-        print self.root
         if self.root is not None and name.startswith(self.root):
             return name[len(self.root):]
         return name
@@ -327,4 +326,5 @@ distribution = setup ( # Distribution meta-data
         pyogl_extension("pymol.opengl.gl.openglutil", ["contrib/pyopengl/openglutil.c"]),
         pyogl_extension("pymol.opengl.gl.openglutil_num", ["contrib/pyopengl/openglutil_num.c"]),
     ],
+    data_files = data_files
 )
