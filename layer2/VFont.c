@@ -14,9 +14,9 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_gl.h"
-#include"os_python.h"
 #include"OOMac.h"
 #include"MemoryDebug.h"
 #include"Feedback.h"
@@ -64,6 +64,7 @@ int VFontWriteToCGO(PyMOLGlobals * G, int font_id, CGO * cgo,
   float *pc;
   unsigned char c;
   int drawing, stroke;
+  float *cgo_verts, *tmp_ptr;
   ov_diff offset;
   if((font_id > 0) && (font_id <= I->NFont)) {
     fr = I->Font[font_id];
@@ -105,6 +106,8 @@ int VFontWriteToCGO(PyMOLGlobals * G, int font_id, CGO * cgo,
                 transform33f3f(matrix, pen, pen);
               add3f(base, pen, pen);
               if(stroke) {
+		(void)tmp_ptr;
+		(void)cgo_verts;
                 CGOVertexv(cgo, pen);
               }
               break;
@@ -119,8 +122,9 @@ int VFontWriteToCGO(PyMOLGlobals * G, int font_id, CGO * cgo,
           if(matrix)
             transform33f3f(matrix, pen, pen);
           add3f(pen, pos, pos);
-          if(stroke)
+          if(stroke){
             CGOEnd(cgo);
+	  }
         }
       }
   } else {

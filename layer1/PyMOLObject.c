@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_gl.h"
@@ -30,6 +31,7 @@ Z* -------------------------------------------------------------------
 #include"MemoryDebug.h"
 #include"Movie.h"
 #include"View.h"
+#include"Err.h"
 
 #include"Executive.h"
 
@@ -217,10 +219,10 @@ int ObjectGetSpecLevel(CObject * I, int frame)
   return -1;
 }
 
-void ObjectDrawViewElem(CObject *I, BlockRect *rect,int frames)
+void ObjectDrawViewElem(CObject *I, BlockRect *rect,int frames ORTHOCGOARG)
 {
   if(I->ViewElem) {
-    ViewElemDraw(I->G,I->ViewElem,rect,frames,I->Name);
+    ViewElemDraw(I->G,I->ViewElem,rect,frames,I->Name ORTHOCGOARGVAR);
   }
 }
 
@@ -552,7 +554,10 @@ void ObjectAdjustStateRebuildRange(CObject * I, int *start, int *stop)
     SettingGet_i(I->G, NULL, I->Setting, cSetting_defer_builds_mode);
   int async_builds = SettingGet_b(I->G, NULL, I->Setting, cSetting_async_builds);
   int max_threads = SettingGet_i(I->G, NULL, I->Setting, cSetting_max_threads);
+  int all_states = SettingGet_i(I->G, NULL, I->Setting, cSetting_all_states);
   int dummy;
+  if (all_states)
+    return;
   if(defer_builds_mode >= 3) {
     if(SceneObjectIsActive(I->G, I))
       defer_builds_mode = 2;
@@ -876,6 +881,7 @@ void ObjectSetTTT(CObject * I, float *ttt, int state, int store)
       I->TTTFlag = true;
     } else {
       I->TTTFlag = false;
+      return;
     }
     if(store<0) 
       store = SettingGet_i(I->G, I->Setting, NULL, cSetting_movie_auto_store);
@@ -1037,7 +1043,6 @@ void ObjectPrepareContext(CObject * I, CRay * ray)
 /*========================================================================*/
 void ObjectSetTTTOrigin(CObject * I, float *origin)
 {
-#if 1
   float homo[16];
   float *dst;
   float post[3];
@@ -1064,24 +1069,6 @@ void ObjectSetTTTOrigin(CObject * I, float *origin)
   invert3f3f(origin, dst);
 
   copy44f(homo, I->TTT);
-
-#else
-  if(!I->TTTFlag) {
-    I->TTTFlag = true;
-    initializeTTT44f(I->TTT);
-  }
-
-  I->TTT[3] += I->TTT[12];      /* remove existing origin from overall translation */
-  I->TTT[7] += I->TTT[13];
-  I->TTT[11] += I->TTT[14];
-
-  scale3f(origin, -1.0F, I->TTT + 12);  /* set new origin */
-
-  I->TTT[3] += origin[0];       /* add new origin into overall translation */
-  I->TTT[7] += origin[1];
-  I->TTT[11] += origin[2];
-#endif
-
 }
 
 
@@ -1169,6 +1156,13 @@ void ObjectUseColor(CObject * I)
   }
 }
 
+void ObjectUseColorCGO(CGO *cgo, CObject * I)
+{
+  register PyMOLGlobals *G = I->G;
+  if(G->HaveGUI && G->ValidContext) {
+    CGOColorv(cgo, ColorGet(I->G, I->Color));
+  }
+}
 
 /*========================================================================*/
 static void ObjectInvalidate(CObject * this, int rep, int level, int state)
@@ -1182,7 +1176,24 @@ static void ObjectRenderUnitBox(CObject * this, RenderInfo * info)
 {
   register PyMOLGlobals *G = this->G;
   if(G->HaveGUI && G->ValidContext) {
-
+#ifdef _PYMOL_GL_DRAWARRAYS
+    {
+      const GLint lineVerts[] = {
+	-1, -1, -1,
+	-1, -1, 1,
+	-1, 1, 1,
+	-1, 1, -1,
+	1, 1, -1,
+	1, 1, 1,
+	1, -1, 1,
+	1, -1, -1
+      };
+      glEnableClientState(GL_VERTEX_ARRAY);
+      glVertexPointer(3, GL_INT, 0, lineVerts);
+      glDrawArrays(GL_LINE_LOOP, 0, 8);
+      glDisableClientState(GL_VERTEX_ARRAY);
+    }
+#else
     glBegin(GL_LINE_LOOP);
     glVertex3i(-1, -1, -1);
     glVertex3i(-1, -1, 1);
@@ -1194,7 +1205,24 @@ static void ObjectRenderUnitBox(CObject * this, RenderInfo * info)
     glVertex3i(1, -1, 1);
     glVertex3i(1, -1, -1);
     glEnd();
+#endif
 
+#ifdef _PYMOL_GL_DRAWARRAYS
+    {
+      const GLint lineVerts[] = {
+	0, 0, 0,
+	1, 0, 0,
+	0, 0, 0,
+	0, 3, 0,
+	0, 0, 0,
+	0, 0, 9
+      };
+      glEnableClientState(GL_VERTEX_ARRAY);
+      glVertexPointer(3, GL_INT, 0, lineVerts);
+      glDrawArrays(GL_LINES, 0, 6);
+      glDisableClientState(GL_VERTEX_ARRAY);
+    }
+#else
     glBegin(GL_LINES);
     glVertex3i(0, 0, 0);
     glVertex3i(1, 0, 0);
@@ -1206,6 +1234,7 @@ static void ObjectRenderUnitBox(CObject * this, RenderInfo * info)
     glVertex3i(0, 0, 9);
 
     glEnd();
+#endif
   }
 }
 
@@ -1274,17 +1303,21 @@ void ObjectStatePurge(CObjectState * I)
   FreeP(I->Matrix);
 }
 
-void ObjectStateSetMatrix(CObjectState * I, double *matrix)
+int ObjectStateSetMatrix(CObjectState * I, double *matrix)
 {
+  int ok = true;
   if(matrix) {
     if(!I->Matrix)
       I->Matrix = Alloc(double, 16);
+    CHECKOK(ok, I->Matrix);
     if(I->Matrix) {
       copy44d(matrix, I->Matrix);
     }
   } else if(I->Matrix) {
     FreeP(I->Matrix);
+    I->Matrix = NULL;
   }
+  return ok;
 }
 
 void ObjectStateRightCombineMatrixR44d(CObjectState * I, double *matrix)

@@ -25,6 +25,7 @@ Z* -------------------------------------------------------------------
 typedef struct ObjectCGOState {
   CGO *std;
   CGO *ray;
+  CGO *shaderCGO;
   int valid;
 } ObjectCGOState;
 
@@ -46,5 +47,7 @@ PyObject *ObjectCGOAsPyList(ObjectCGO * I);
 int ObjectCGONewFromPyList(PyMOLGlobals * G, PyObject * list, ObjectCGO ** result,
                            int version);
 ObjectCGO *ObjectCGONewVFontTest(PyMOLGlobals * G, char *text, float *pos);
+
+void ObjectCGOFree(ObjectCGO * I);
 
 #endif

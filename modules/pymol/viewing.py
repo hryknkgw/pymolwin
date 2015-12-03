@@ -36,6 +36,19 @@ if __name__=='pymol.viewing':
           DEFAULT_ERROR, DEFAULT_SUCCESS
         
     import thread
+
+    palette_colors_dict = {
+        'rainbow_cycle'     : 'magenta blue cyan green yellow orange red magenta',
+        'rainbow_cycle_rev' : 'magenta red orange yellow green cyan blue magenta',
+        'rainbow'           : 'blue cyan green yellow orange red',
+        'rainbow_rev'       : 'red orange yellow green cyan blue',
+        'rainbow2'          : 'blue cyan green yellow orange red',
+        'rainbow2_rev'      : 'red orange yellow green cyan blue',
+        'gcbmry'            : 'green cyan blue magenta red yellow',
+        'yrmbcg'            : 'yellow red magenta blue cyan green',
+        'cbmr'              : 'cyan blue magenta red',
+        'rmbc'              : 'red magenta blue cyan',
+    }
     
     rep_list = [ "lines", "sticks", "spheres", "dots", "surface",
                  "mesh", "nonbonded", "nb_spheres", "cartoon",
@@ -642,6 +655,7 @@ SEE ALSO
         r = DEFAULT_ERROR
         try:
             _self.lock(_self)
+            vis_sel = None
             if (representation=="") and (selection==""):
                 if is_ok(_cmd.showhide(_self._COb,str(selection),-1,0)):
                     if is_ok(_cmd.showhide(_self._COb,"(all)",repres['lines'],1)):
@@ -652,7 +666,14 @@ SEE ALSO
                 repn = repres[rep]
                 # preprocess selection 
                 selection = selector.process(selection)
-                #
+
+                # user specified 'visible' -- this has always been problematic
+
+                if "visible".startswith(selection.lower()) and len(string.split(selection))==1:
+                    vis_sel = _self.get_unused_name("_vis")
+                    _self.select(vis_sel, selection)
+                    selection = vis_sel
+
                 if is_ok(_cmd.showhide(_self._COb,str(selection),-1,0)):
                     r = _cmd.showhide(_self._COb,str(selection),int(repn),1)
             elif representation=='all':
@@ -671,6 +692,8 @@ SEE ALSO
                 if is_ok(_cmd.showhide(_self._COb,"all",-1,0)):
                     r = _cmd.showhide(_self._COb,"all",int(repn),1);
         finally:
+            if vis_sel is not None:
+                _self.delete(vis_sel)
             _self.unlock(r,_self)
         if _self._raising(r,_self): raise QuietException
         return r
@@ -967,6 +990,60 @@ SEE ALSO
                     if _feedback(fb_module.scene,fb_mask.actions,_self): # redundant
                         print " view: '%s' deleted."%key
 
+
+    def get_viewport(output=1, quiet=1, _self=cmd):
+        '''
+DESCRIPTION
+
+    "get_viewport" returns and optionally prints out the screen viewport size
+
+    If a log file is currently open, get_viewport will not write the view
+    matrix to the screen unless the "output" parameter is 2.
+
+USAGE
+
+    get_viewport [output]
+
+ARGUMENTS
+
+    output = 0: output matrix to screen
+
+    output = 1: do not Output matrix to screen
+
+    output = 2: force output to screen even if log file is open
+
+    output = 3: return formatted string instead of a list
+
+PYMOL API
+
+    cmd.get_viewport(output=1, quiet=1)
+
+    '''
+
+        r = DEFAULT_ERROR
+        try:
+            _self.lock(_self)
+            r = _cmd.get_viewport(_self._COb)
+        finally:
+            _self.unlock(r,_self)
+        if is_ok(r):
+            if len(r):
+                if (_self.get_setting_legacy("logging")!=0.0) and (output<3):
+                    if not quiet:
+                        print " get_viewport: data written to log file."
+                    _self.log("_ viewport (\\\n","cmd.viewport((\\\n")
+                    _self.log("_  %14.9f, %14.9f ))\n"% r)
+                    if output<2: # suppress if we have a log file open
+                        output=0
+                if output and (not quiet) and (output<3):
+                    print "### cut below here and paste into script ###"
+                    print "viewport ( %14.9f, %14.9f )"% r
+                    print "### cut above here and paste into script ###"
+            if output==3:
+                return ("viewport ( %14.9f, %14.9f )\n"% r)
+        elif _self._raising(r,_self):
+            raise QuietException
+        return r
 
     def get_vis(_self=cmd):
         r = DEFAULT_ERROR      
@@ -1469,39 +1546,24 @@ SEE ALSO
                         _self.delete(name)
                     if key not in pymol._scene_order:
                         pymol._scene_order.append(key)
-                    entry = []
-                    if view:
-                        entry.append(_self.get_view(0))
-                    else:
-                        entry.append(None);
-                    if active:
-                        entry.append(_self.get_vis())
-                    else:
-                        entry.append(None)
-                    if frame:
-                        entry.append(_self.get_frame())
-                    else:
-                        entry.append(None)
-                    if color:
-                        entry.append(_self.get_colorection(key))
-                    else:
-                        entry.append(None)
                     if rep:
-                        entry.append(1)
                         for rep_name in rep_list:
                             name = "_scene_"+key+"_"+rep_name
                             _self.select(name,"rep "+rep_name)
-                    else:
-                        entry.append(None)
-                    if is_string(message):
-                        if len(message)>1:
+                    if message:
                             if (message[0:1] in [ '"',"'"] and
                                  message[-1:] in [ '"',"'"]):
                                 message=message[1:-1]
                             else:
-                                message = string.split(message,"\n")
-                    entry.append(message)
-                    pymol._scene_dict[key]=entry
+                                message = message.splitlines()
+                    pymol._scene_dict[key] = [
+                        _self.get_view(0) if view else None,
+                        _self.get_vis() if active else None,
+                        _self.get_frame() if frame else None,
+                        _self.get_colorection(key) if color else None,
+                        1 if rep else None,
+                        message,
+                    ]
                     if _feedback(fb_module.scene,fb_mask.actions,_self):
                         print " scene: scene "+action+"d as \"%s\"."%key
                     _scene_validate_list(_self)                        
@@ -1521,7 +1583,9 @@ SEE ALSO
                         lst = _scene_validate_list(_self)
                         if key == setting.get("scene_current_name",_self=_self):
                             ix = lst.index(key) - 1
-                            if ix>=0:
+                            if ix<0:
+                                ix = lst.index(key) + 1
+                            if ix>=0 and ix < len(lst):
                                 setting.set("scene_current_name",lst[ix],quiet=1,_self=_self)
                             else:
                                 setting.set("scene_current_name","",quiet=1,_self=_self) 
@@ -1904,6 +1968,19 @@ PYMOL API
     cmd.viewport(int width, int height)
         '''
         r = None
+        if cmd.is_string(width) and height < 0:
+            try:
+                width = eval(re.sub(r"[^0-9,\-\)\(\.]","",width))
+            except:
+                traceback.print_exc()
+                print "Error: bad viewport argument; should be 2 floats, width and height."
+                raise QuietException
+            if len(width)!=2:
+                print "Error: bad viewport argument; should be 2 floats, width and height."
+                raise QuietException
+            height = width[1]
+            width = width[0]
+
         if not cmd.is_glut_thread():
             _self.do("viewport %d,%d"%(int(width),int(height)),0)
         else:
@@ -2423,7 +2500,7 @@ EXAMPLE
         # preprocess selection
         selection = selector.process(selection)
         color = _self._interpret_color(_self,str(color))
-        #
+
         r = DEFAULT_ERROR      
         try:
             _self.lock(_self)
@@ -2431,6 +2508,81 @@ EXAMPLE
         finally:
             _self.unlock(r,_self)
         if _self._raising(r,_self): raise QuietException
+        return r
+
+    def spectrumany(expression, colors, selection='(all)', minimum=None,
+            maximum=None, quiet=1, _self=cmd):
+        '''
+DESCRIPTION
+
+    Pure python implementation of the spectrum command. Supports arbitrary
+    color lists instead of palettes and any numerical atom property which
+    works in iterate as expression.
+
+    Non-numeric values (like resn) will be enumerated.
+
+    This is not a separate PyMOL command but is used as a fallback in "spectrum".
+        '''
+        from . import CmdException
+
+        if ' ' not in colors:
+            colors = palette_colors_dict.get(colors) or colors.replace('_', ' ')
+
+        quiet, colors = int(quiet), colors.split()
+
+        n_colors = len(colors)
+        if n_colors < 2:
+            raise CmdException('please provide at least 2 colors')
+
+        col_tuples = [_self.get_color_tuple(i) for i in colors]
+        if None in col_tuples:
+            raise CmdException('unknown color')
+
+        expression = {'pc': 'partial_charge', 'fc': 'formal_charge',
+                'resi': 'resv'}.get(expression, expression)
+
+        if expression == 'count':
+            e_list = range(_self.count_atoms(selection))
+        else:
+            e_list = []
+            _self.iterate(selection, 'e_list.append(%s)' % (expression), space=locals())
+
+        try:
+            v_list = [float(v) for v in e_list if v is not None]
+        except (TypeError, ValueError):
+            if not quiet:
+                print ' Spectrum: Expression is non-numeric, enumerating values'
+            v_list = e_list = map(sorted(set(e_list)).index, e_list)
+
+        if not v_list:
+            return (0., 0.)
+
+        if minimum is None: minimum = min(v_list)
+        if maximum is None: maximum = max(v_list)
+        r = minimum, maximum = float(minimum), float(maximum)
+        if not quiet:
+            print ' Spectrum: range (%.5f to %.5f)' % r
+
+        val_range = maximum - minimum
+        if not val_range:
+            _self.color(colors[0], selection)
+            return r
+
+        e_it = iter(e_list)
+        def next_color():
+            v = e_it.next()
+            if v is None:
+                return False
+            v = (float(v) - minimum) / val_range * (n_colors - 1)
+            i = min(int(v), n_colors - 2)
+            p = v - i
+            rgb = [int(255 * (col_tuples[i+1][j] * p + col_tuples[i][j] * (1.0 - p)))
+                    for j in range(3)]
+            return 0x40000000 + rgb[0] * 0x10000 + rgb[1] * 0x100 + rgb[2]
+
+        _self.alter(selection, 'color = next_color() or color', space=locals())
+        _self.recolor(selection)
+
         return r
 
     def spectrum(expression="count", palette="rainbow",
@@ -2452,7 +2604,8 @@ ARGUMENTS
     expression = count, b, q, or pc: respectively, atom count, temperature factor,
     occupancy, or partial charge {default: count}
     
-    palette = string: palette name {default: rainbow}
+    palette = string: palette name or space separated list of colors
+    {default: rainbow}
 
     selection = string: atoms to color {default: (all)}
 
@@ -2496,8 +2649,13 @@ PYMOL API
 
 
         '''
+        palette_hit = palette_sc.shortcut.get(palette)
+        if palette_hit:
+            palette = palette_hit
 
-        palette = palette_sc.auto_err(palette,'palette')
+        if expression not in ('count', 'b', 'q', 'pc') or not palette_hit:
+            return spectrumany(expression, palette, selection,
+                    minimum, maximum, quiet, _self)
         
         (prefix,digits,first,last) = palette_dict[str(palette)]
 

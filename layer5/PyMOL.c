@@ -14,7 +14,7 @@
    -*
    Z* -------------------------------------------------------------------
 */
-
+#include"os_python.h"
 #include "os_std.h"
 #include "os_gl.h"
 
@@ -64,6 +64,9 @@
 #include "PyMOLGlobals.h"
 #include "PyMOLOptions.h"
 #include "Feedback.h"
+
+#include "ShaderMgr.h"
+#include "Version.h"
 
 #ifndef _PYMOL_NOPY
 PyMOLGlobals *SingletonPyMOLGlobals = NULL;
@@ -850,6 +853,51 @@ typedef struct _CPyMOL {
 
   ov_word lex_state_counter_mode;
 
+  ov_word lex_cgo_use_shader;
+
+  ov_word lex_cgo_shader_ub_color;
+  ov_word lex_cgo_shader_ub_normal;
+  ov_word lex_cgo_lighting;
+  ov_word lex_mesh_use_shader;
+  ov_word lex_stick_debug;
+  ov_word lex_cgo_debug;
+  ov_word lex_stick_round_nub;
+  ov_word lex_stick_good_geometry;
+  ov_word lex_stick_as_cylinders;
+  ov_word lex_mesh_as_cylinders;
+  ov_word lex_line_as_cylinders;
+  ov_word lex_ribbon_as_cylinders;
+  ov_word lex_ribbon_use_shader;
+  ov_word lex_excl_display_lists_shaders;
+  ov_word lex_dash_use_shader;
+  ov_word lex_dash_as_cylinders;
+  ov_word lex_nonbonded_use_shader;
+  ov_word lex_nonbonded_as_cylinders;
+  ov_word lex_cylinders_shader_filter_faces;
+  ov_word lex_nb_spheres_size;
+  ov_word lex_nb_spheres_quality;
+  ov_word lex_nb_spheres_use_shader;
+  ov_word lex_render_as_cylinders;
+  ov_word lex_alignment_as_cylinders;
+  ov_word lex_cartoon_nucleic_acid_as_cylinders;
+  ov_word lex_cgo_shader_ub_flags;
+  ov_word lex_offscreen_rendering_for_antialiasing;
+  ov_word lex_offscreen_rendering_multiplier;
+  ov_word lex_cylinder_shader_ff_workaround;
+  ov_word lex_surface_color_smoothing;
+  ov_word lex_surface_color_smoothing_threshold;
+  ov_word lex_dot_use_shader;
+  ov_word lex_dot_as_spheres;
+  ov_word lex_ambient_occlusion_mode;
+  ov_word lex_ambient_occlusion_scale;
+  ov_word lex_ambient_occlusion_smooth;
+  ov_word lex_anaglyph_mode;
+  ov_word lex_edit_light;
+  ov_word lex_smooth_half_bonds;
+  ov_word lex_suspend_undo;
+  ov_word lex_suspend_undo_atom_count;
+  ov_word lex_suspend_deferred;
+  ov_word lex_pick_surface;
 
 #ifdef _PYMOL_LIB
   OVOneToOne *MouseButtonCodeLexicon;
@@ -876,8 +924,10 @@ typedef struct _CPyMOL {
   ov_word lex_but_drgo, lex_but_imsz, lex_but_imvz, lex_but_box, lex_but_irtz;
 
   OVOneToOne *MouseModeLexicon;
-
 #include "buttonmodes_lex_def.h"
+
+  OVOneToOne *PaletteLexicon;
+#include "palettes_lex_def.h"
 
 #endif
 
@@ -1713,6 +1763,50 @@ static OVstatus PyMOL_InitAPI(CPyMOL * I)
   LEX_SETTING(ray_volume, 665);
   LEX_SETTING(ribbon_transparency, 666);
   LEX_SETTING(state_counter_mode, 667);
+  LEX_SETTING(cgo_use_shader, 668);
+  LEX_SETTING(cgo_shader_ub_color, 669);
+  LEX_SETTING(cgo_shader_ub_normal, 670);
+  LEX_SETTING(cgo_lighting, 671);
+  LEX_SETTING(mesh_use_shader, 672);
+  LEX_SETTING(stick_debug, 673);
+  LEX_SETTING(cgo_debug, 674);
+  LEX_SETTING(stick_round_nub, 675);
+  LEX_SETTING(stick_good_geometry, 676);
+  LEX_SETTING(stick_as_cylinders, 677);
+  LEX_SETTING(mesh_as_cylinders, 678);
+  LEX_SETTING(line_as_cylinders, 679);
+  LEX_SETTING(ribbon_as_cylinders, 680);
+  LEX_SETTING(ribbon_use_shader, 681);
+  LEX_SETTING(excl_display_lists_shaders, 682);
+  LEX_SETTING(dash_use_shader, 683);
+  LEX_SETTING(dash_as_cylinders, 684);
+  LEX_SETTING(nonbonded_use_shader, 685);
+  LEX_SETTING(nonbonded_as_cylinders, 686);
+  LEX_SETTING(cylinders_shader_filter_faces, 687)
+  LEX_SETTING(nb_spheres_size, 688)
+  LEX_SETTING(nb_spheres_quality, 689)
+  LEX_SETTING(nb_spheres_use_shader, 690)
+  LEX_SETTING(render_as_cylinders, 691)
+  LEX_SETTING(alignment_as_cylinders, 692)
+  LEX_SETTING(cartoon_nucleic_acid_as_cylinders, 693)
+  LEX_SETTING(cgo_shader_ub_flags, 694);
+  LEX_SETTING(offscreen_rendering_for_antialiasing, 695);
+  LEX_SETTING(offscreen_rendering_multiplier, 696);
+  LEX_SETTING(cylinder_shader_ff_workaround, 697);
+  LEX_SETTING(surface_color_smoothing, 698);
+  LEX_SETTING(surface_color_smoothing_threshold, 699);
+  LEX_SETTING(dot_use_shader, 700);
+  LEX_SETTING(dot_as_spheres, 701);
+  LEX_SETTING(ambient_occlusion_mode, 702);
+  LEX_SETTING(ambient_occlusion_scale, 703);
+  LEX_SETTING(ambient_occlusion_smooth, 704);
+  LEX_SETTING(smooth_half_bonds, 705);
+  LEX_SETTING(anaglyph_mode, 706);
+  LEX_SETTING(edit_light, 707);
+  LEX_SETTING(suspend_undo, 708);
+  LEX_SETTING(suspend_undo_atom_count, 709);
+  LEX_SETTING(suspend_deferred, 710);
+  LEX_SETTING(pick_surface, 711);
 
 #ifdef _PYMOL_LIB
 
@@ -1864,6 +1958,16 @@ static OVstatus PyMOL_InitAPI(CPyMOL * I)
       initial_button_modes[a] = cButModeNone;
     }
   }
+
+  I->PaletteLexicon = OVOneToOne_New(C->heap);
+  if(!I->PaletteLexicon)
+    return_OVstatus_FAILURE;
+
+#define LEX_PALETTE(NAME,CODE) LEX(NAME) \
+    if(!OVreturn_IS_OK( OVOneToOne_Set(I->PaletteLexicon,I->lex_ ## NAME, CODE)))  \
+      return_OVstatus_FAILURE;
+
+#include "palettes_lex_init.h"
 
 #endif
 
@@ -2061,6 +2165,7 @@ PyMOLreturn_float_array PyMOL_CmdAlign(CPyMOL * I, char *source, char *target,
 PyMOLreturn_status PyMOL_CmdDelete(CPyMOL * I, char *name, int quiet)
 {
   PYMOL_API_LOCK ExecutiveDelete(I->G, name);
+  PyMOL_NeedRedisplay(I);  /* this should really only get called if ExecutiveDelete deletes something */
   PYMOL_API_UNLOCK return return_status_ok(true);       /* TO DO: return a real result */
 }
 
@@ -2180,7 +2285,7 @@ PyMOLreturn_status PyMOL_CmdLabel(CPyMOL * I, char *selection, char *text, int q
   int ok = true;
   PYMOL_API_LOCK OrthoLineType s1;
   SelectorGetTmp(I->G, selection, s1);
-  ok = ExecutiveLabel(I->G, s1, text, quiet, cExecutiveLabelEvalOff);
+  ok = ExecutiveLabel(I->G, s1, text, quiet, cExecutiveLabelEvalAlt);
   SelectorFreeTmp(I->G, s1);
   PYMOL_API_UNLOCK return return_status_ok(ok);
 }
@@ -2217,6 +2322,7 @@ PyMOLreturn_status PyMOL_CmdShow(CPyMOL * I, char *representation, char *selecti
       ok = false;
     } else {
       ExecutiveSetRepVisib(I->G, s1, rep_id.word, true);
+      PyMOL_NeedRedisplay(I);  /* this should really only get called if ExecutiveSetRepVisib changes something */
       SelectorFreeTmp(I->G, s1);
     }
   } else {
@@ -2316,7 +2422,7 @@ PyMOLreturn_status PyMOL_CmdUnsetBond(CPyMOL * I, char *setting,
     if(ok) ok = (SelectorGetTmp(I->G, selection1, s1) >= 0);
     if(ok) {
       if(selection2 && selection2[0]) {
-        ok = (SelectorGetTmp(I->G, selection2, s1) >= 0);
+        ok = (SelectorGetTmp(I->G, selection2, s2) >= 0);
       } else {
         ok = (SelectorGetTmp(I->G, selection1, s2) >= 0);
       }
@@ -2411,7 +2517,7 @@ PyMOLreturn_status PyMOL_CmdBackgroundColor(CPyMOL * I, char *value) {
 
   int idx = ColorGetIndex(I->G, value);
   if(idx >= 0){
-    ok = SettingSetfv(I->G, cSetting_bg_rgb, ColorGet(I->G, idx));
+    ok = SettingSet_i(I->G->Setting, cSetting_bg_rgb, idx);
   } else {
     ErrMessage(I->G, "Color", "Bad color name.");
   }
@@ -2432,14 +2538,14 @@ PyMOLreturn_int PyMOL_CmdGetMovieLength(CPyMOL * I,int quiet)
 {
   int ok = true;
   PyMOLreturn_int result;
+  result.status = PyMOLstatus_FAILURE;
+  result.value = 0;
+
   PYMOL_API_LOCK
   if(ok) {
     result.value = MovieGetLength(I->G);
     result.status = get_status_ok(ok);
-  } else {
-    result.status = PyMOLstatus_FAILURE;
-    result.value = 0;
-  }
+  };
   PYMOL_API_UNLOCK return result;
 }
 
@@ -3021,6 +3127,8 @@ static PyMOLreturn_status Loader(CPyMOL * I, char *content, char *content_type,
       }
     }
   }
+  if (ok)
+    PyMOL_NeedRedisplay(I);
   return return_status_ok(ok);
 }
 
@@ -3255,26 +3363,6 @@ static void init_python(int argc, char *argv[])
 
 
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
-#if 0
-
-/* Not currently needed, since we've switched MacPyMOL away from the system Python */
-#ifdef _MACPYMOL_XCODE
-  {                             /* add an architecture-dependent search path for platform-specific binary modules
-                                   here we're cheating by using endianness instead of figuring out how to get the
-                                   true architecture from OS X */
-    unsigned int val = 0x01020304;
-    unsigned int *i_ptr = &val;
-    char *c_ptr = (char *) i_ptr;
-    if(*c_ptr == 0x01) {
-      PyRun_SimpleString("sys.path.insert(0,os.environ['PYMOL_PATH']+'/modules/ppc')");
-    } else {
-      PyRun_SimpleString("sys.path.insert(0,os.environ['PYMOL_PATH']+'/modules/i386')");
-    }
-  }
-#endif
-#endif
-
-
 /* END PROPRIETARY CODE SEGMENT */
 
   PyRun_SimpleString("import __main__");
@@ -3596,6 +3684,7 @@ void PyMOL_Stop(CPyMOL * I)
 {
   PyMOLGlobals *G = I->G;
   G->Terminating = true;
+  CShaderMgrFree(G);
   TetsurfFree(G);
   IsosurfFree(G);
   WizardFree(G);
@@ -3714,6 +3803,7 @@ PYMOL_API_UNLOCK}
 
 static void setup_gl_state(void)
 {
+
   /* get us into a well defined GL state */
 
   /*glMatrixMode(GL_PROJECTION);
@@ -3722,33 +3812,42 @@ static void setup_gl_state(void)
      glLoadIdentity(); */
 
   glDisable(GL_ALPHA_TEST);
-  glDisable(GL_AUTO_NORMAL);
-  glDisable(GL_BLEND);
   glDisable(GL_COLOR_LOGIC_OP);
   glDisable(GL_COLOR_MATERIAL);
-  glDisable(GL_CULL_FACE);
-
-  glDisable(GL_DEPTH_TEST);
-  glDisable(GL_DITHER);
   glDisable(GL_FOG);
   glDisable(GL_LIGHTING);
   glDisable(GL_LIGHT0);
   glDisable(GL_LIGHT1);
   glDisable(GL_LINE_SMOOTH);
   glDisable(GL_NORMALIZE);
+
+#ifndef _PYMOL_GL_DRAWARRAYS
+  glDisable(GL_AUTO_NORMAL);
+#endif
+  glDisable(GL_BLEND);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_DEPTH_TEST);
+  glDisable(GL_DITHER);
+#ifndef _PYMOL_GL_DRAWARRAYS
   glDisable(GL_POLYGON_SMOOTH);
+#endif
+}
+void PyMOL_DrawWithoutLock(CPyMOL * I);
+
+void PyMOL_Draw(CPyMOL * I){
+  PYMOL_API_LOCK_MODAL
+  PyMOL_DrawWithoutLock(I);
+  PYMOL_API_UNLOCK
 }
 
-void PyMOL_Draw(CPyMOL * I)
+void PyMOL_DrawWithoutLock(CPyMOL * I)
 {
-  PYMOL_API_LOCK_MODAL PyMOLGlobals * G = I->G;
-
+  PyMOLGlobals * G = I->G;
   if(I->ModalDraw) {
     if(G->HaveGUI) {
       PyMOL_PushValidContext(I);
       setup_gl_state();
     }
-
     {
       PyMOLModalDrawFn *fn = I->ModalDraw;
       I->ModalDraw = NULL;      /* always resets to NULL! */
@@ -3768,7 +3867,6 @@ void PyMOL_Draw(CPyMOL * I)
     }
 
     if(G->HaveGUI) {
-
       PyMOL_PushValidContext(I);
 
       setup_gl_state();
@@ -3828,13 +3926,14 @@ void PyMOL_Draw(CPyMOL * I)
     if(G->HaveGUI)
       PyMOL_PopValidContext(I);
   }
-PYMOL_API_UNLOCK}
+}
 
 void PyMOL_Key(CPyMOL * I, unsigned char k, int x, int y, int modifiers)
 {
   PYMOL_API_LOCK PyMOLGlobals * G = I->G;
   if(!WizardDoKey(G, k, x, y, modifiers))
     OrthoKey(G, k, x, y, modifiers);
+  PyMOL_NeedRedisplay(G->PyMOL);
 PYMOL_API_UNLOCK}
 
 void PyMOL_Special(CPyMOL * I, int k, int x, int y, int modifiers)
@@ -4026,7 +4125,7 @@ void PyMOL_NeedReshape(CPyMOL * I, int mode, int x, int y, int width, int height
     int w;
     int internal_feedback;
     BlockGetSize(SceneGetBlock(G), &w, &height);
-    internal_feedback = (int) SettingGet(G, cSetting_internal_feedback);
+    internal_feedback = SettingGetGlobal_i(G, cSetting_internal_feedback);
     if(internal_feedback)
       height += (internal_feedback - 1) * cOrthoLineHeight + cOrthoBottomSceneMargin;
     if(SettingGetGlobal_b(G, cSetting_seq_view)
@@ -4329,11 +4428,6 @@ void PyMOL_SetBusy(CPyMOL * I, int value)
     PyMOL_ResetProgress(I);
 
   I->BusyFlag = value;
-
-#if 0
-  if(!I->BusyFlag)              /* reset the interrupt flag once we're done being busy */
-    PyMOL_SetInterrupt(I, false);
-#endif
 }
 
 int PyMOL_GetInterrupt(CPyMOL * I, int reset)
@@ -4496,14 +4590,19 @@ PyMOLreturn_string_array PyMOL_CmdGetNames(CPyMOL * I, int mode, char *s0, int e
 
   res = ExecutiveGetObjectNames(G, mode, s0, enabled_only, &numstrs);
 
-  reslen = VLAGetSize(res);
-  result.array = VLAlloc(char*, numstrs);
-  result.size = numstrs;
-  numstrs = 0;
-  for (pl=0; pl<reslen;){
-    result.array[numstrs] = &res[pl];
-    pl += strlen(res + pl) + 1;
-    numstrs++;
+  if (numstrs){
+    reslen = VLAGetSize(res);
+    result.array = VLAlloc(char*, numstrs);
+    result.size = numstrs;
+    numstrs = 0;
+    for (pl=0; pl<reslen;){
+      result.array[numstrs] = &res[pl];
+      pl += strlen(res + pl) + 1;
+      numstrs++;
+    }
+  } else {
+    result.array = NULL;
+    result.size = 0;
   }
   PYMOL_API_UNLOCK 
   return (result);
@@ -4623,8 +4722,12 @@ PyMOLreturn_status PyMOL_SetMouseButtonMode(CPyMOL * I, char *modename){
   PyMOLreturn_status result = { PyMOLstatus_FAILURE };
 
   PYMOL_API_LOCK
-    UtilNCopyToLower(modename, modename, strlen(modename)+1);
-    ok = OVreturn_IS_OK(mode = get_mouse_mode(I, modename));
+    {
+        ALLOCATE_ARRAY(char*, nmodename, strlen(modename)+1)
+	UtilNCopyToLower((char*)nmodename, modename, strlen(modename)+1);
+        ok = OVreturn_IS_OK(mode = get_mouse_mode(I, (char*)nmodename));
+        DEALLOCATE_ARRAY(nmodename)
+    }
   if (ok){
     result.status =  PyMOLstatus_SUCCESS;
     {
@@ -4672,4 +4775,87 @@ static OVreturn_word get_mouse_mode(CPyMOL * I, char *mousemode)
   return OVOneToOne_GetForward(I->MouseModeLexicon, result.word);
 }
 
+PyMOLreturn_status PyMOL_ZoomScene(CPyMOL * I, float scale){
+  PyMOLreturn_status result = { PyMOLstatus_FAILURE };
+  PYMOL_API_LOCK  
+    SceneZoom(I->G, scale);
+    PyMOL_NeedRedisplay(I);
+  result.status =  PyMOLstatus_SUCCESS;
+  PYMOL_API_UNLOCK return result;
+}
+
+PyMOLreturn_status PyMOL_TranslateScene(CPyMOL * I, float x, float y, float z){
+  PyMOLreturn_status result = { PyMOLstatus_FAILURE };
+  PYMOL_API_LOCK  
+    SceneTranslate(I->G, x, y, z);
+  result.status =  PyMOLstatus_SUCCESS;
+  PYMOL_API_UNLOCK return result;
+}
+
+#include "palettes.h"
+
+static OVreturn_word get_palette(CPyMOL * I, char *palette)
+{
+  OVreturn_word result;
+  if(!OVreturn_IS_OK((result = OVLexicon_BorrowFromCString(I->Lex, palette))))
+    return result;
+  return OVOneToOne_GetForward(I->PaletteLexicon, result.word);
+}
+
+PyMOLreturn_float_array PyMOL_Spectrum(CPyMOL * I, char *expression, char *pal, char *selection, float minimum, float maximum, int byres, int quiet){
+  PyMOLreturn_float_array result = { PyMOLstatus_FAILURE };
+  PYMOL_API_LOCK
+  int ok = true;
+  int digits, first, last, array_pl, ret;
+  float min_ret, max_ret;
+  char prefix[2];
+  OVreturn_word pal_word;
+  OrthoLineType s1;
+  ALLOCATE_ARRAY(char*, palette, strlen(pal)+1)
+    UtilNCopyToLower((char*)palette, pal, strlen(pal)+1);
+  
+  if(selection[0])
+    ok = (SelectorGetTmp(I->G, selection, s1) >= 0);
+  else
+    s1[0] = 0;
+
+  if (ok)
+    ok = OVreturn_IS_OK(pal_word = get_palette(I, (char*)palette));  
+  DEALLOCATE_ARRAY(palette)
+  prefix[0] = palette_prefix[pal_word.word];
+  prefix[1] = 0;
+  array_pl = pal_word.word * 3;
+  digits = palette_data[array_pl++];
+  first = palette_data[array_pl++];
+  last = palette_data[array_pl++];
+
+  ret = ExecutiveSpectrum(I->G, s1, expression, minimum, maximum, first, last, prefix, digits, byres, quiet, &min_ret, &max_ret);
+  SelectorFreeTmp(I->G, s1);
+
+  if (ret){
+    result.size = 2;
+    result.array = VLAlloc(float, 2);
+    result.array[0] = min_ret;
+    result.array[1] = max_ret;
+    result.status = PyMOLstatus_SUCCESS;
+  } else {
+    result.status = PyMOLstatus_FAILURE;
+  }
+  PYMOL_API_UNLOCK return result;
+}
+
 #endif
+
+PyMOLreturn_value PyMOL_GetVersion(CPyMOL * I){
+  int ok = true;
+  PyMOLreturn_value result;
+  result.status = PyMOLstatus_FAILURE;
+
+  PYMOL_API_LOCK
+  if(ok) {
+    result.type = PYMOL_RETURN_VALUE_IS_STRING;
+    result.string = strdup(_PyMOL_VERSION);
+    result.status = PyMOLstatus_SUCCESS;
+  };
+  PYMOL_API_UNLOCK return result;
+}

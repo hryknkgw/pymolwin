@@ -23,6 +23,7 @@ dependencies as one C library.  That means we need to explicitly call
 the initialization functions for these libraries on startup.
 
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -33,11 +34,6 @@ the initialization functions for these libraries on startup.
 #ifdef WIN32
 #include<windows.h>
 #include<process.h>
-#ifndef WIN64
-#if 0
-#include<winappc.h>
-#endif
-#endif
 #endif
 
 /* END PROPRIETARY CODE SEGMENT */
@@ -291,6 +287,12 @@ int PLabelAtomAlt(PyMOLGlobals * G, AtomInfoType * at, char *model, char *expr, 
             if(at->textType)
               st = OVLexicon_FetchCString(G->Lexicon, at->textType);
             label_len = label_copy_text(label, st, label_len, label_max);
+          } else if(!strcmp(tok, "custom")) {
+            char null_st[1] = "";
+            char *st = null_st;
+            if(at->custom)
+              st = OVLexicon_FetchCString(G->Lexicon, at->custom);
+            label_len = label_copy_text(label, st, label_len, label_max);
           } else if(!strcmp(tok, "elem")) {
             label_len = label_copy_text(label, at->elem, label_len, label_max);
           } else if(!strcmp(tok, "geom")) {
@@ -429,7 +431,7 @@ static void PLockAPIWhileBlocked(PyMOLGlobals * G);
 
 #define P_log_file_str "_log_file"
 
-#define xxxPYMOL_NEW_THREADS
+#define xxxPYMOL_NEW_THREADS 1
 
 unsigned int PyThread_get_thread_ident(void);   /* critical functionality */
 
@@ -793,7 +795,7 @@ void PDumpException()
   PyObject_CallMethod(P_traceback, "print_exc", "");
 }
 
-int PAlterAtomState(PyMOLGlobals * G, float *v, char *expr, int read_only,
+int PAlterAtomState(PyMOLGlobals * G, float *v, PyCodeObject *expr_co, int read_only,
                     AtomInfoType * at, char *model, int index, PyObject * space)
 
 /* assumes Blocked python interpreter */
@@ -836,6 +838,10 @@ int PAlterAtomState(PyMOLGlobals * G, float *v, char *expr, int read_only,
         st = OVLexicon_FetchCString(G->Lexicon, at->textType);
       PConvStringToPyDictItem(dict, "text_type", st);
 
+      if(at->custom)
+        st = OVLexicon_FetchCString(G->Lexicon, at->custom);
+      PConvStringToPyDictItem(dict, "custom", st);
+
       st = null_st;
       if(at->label)
         st = OVLexicon_FetchCString(G->Lexicon, at->label);
@@ -862,7 +868,7 @@ int PAlterAtomState(PyMOLGlobals * G, float *v, char *expr, int read_only,
   x_id1 = PConvFloatToPyDictItem(dict, "x", v[0]);
   y_id1 = PConvFloatToPyDictItem(dict, "y", v[1]);
   z_id1 = PConvFloatToPyDictItem(dict, "z", v[2]);
-  PXDecRef(PyRun_String(expr, Py_single_input, space, dict));
+  PXDecRef(PyEval_EvalCode(expr_co, space, dict));
   if(PyErr_Occurred()) {
     PyErr_Print();
     result = false;
@@ -912,7 +918,7 @@ int PAlterAtomState(PyMOLGlobals * G, float *v, char *expr, int read_only,
 }
 
 int PAlterAtom(PyMOLGlobals * G,
-               AtomInfoType * at, char *expr, int read_only,
+               AtomInfoType * at, PyCodeObject *expr_co, int read_only,
                char *model, int index, PyObject * space)
 {
   /* assumes Blocked python interpreter */
@@ -936,6 +942,7 @@ int PAlterAtom(PyMOLGlobals * G,
   int flags;
   PyObject *segi_id1, *segi_id2 = NULL;
   PyObject *text_type_id1, *text_type_id2 = NULL;
+  PyObject *custom_id1, *custom_id2 = NULL;
   SSType ssType;
   PyObject *ss_id1, *ss_id2 = NULL;
   char atype[7], mmstereotype[2];
@@ -1013,6 +1020,12 @@ int PAlterAtom(PyMOLGlobals * G,
     text_type_id1 = PConvStringToPyDictItem(dict, "text_type", st);
 
     st = null_st;
+
+    if(at->custom)
+      st = OVLexicon_FetchCString(G->Lexicon, at->custom);
+    custom_id1 = PConvStringToPyDictItem(dict, "custom", st);
+
+    st = null_st;
     if(at->label)
       st = OVLexicon_FetchCString(G->Lexicon, at->label);
     label_id1 = PConvStringToPyDictItem(dict, "label", st);
@@ -1023,7 +1036,7 @@ int PAlterAtom(PyMOLGlobals * G,
   state_id1 = PConvIntToPyDictItem(dict, "state", at->discrete_state);
   rank_id1 = PConvIntToPyDictItem(dict, "rank", at->rank);
 
-  PXDecRef(PyRun_String(expr, Py_single_input, space, dict));
+  PXDecRef(PyEval_EvalCode(expr_co, space, dict));
   if(PyErr_Occurred()) {
     ErrMessage(G, "Alter", "Aborting on error. Assignment may be incomplete.");
     PyErr_Print();
@@ -1060,6 +1073,8 @@ int PAlterAtom(PyMOLGlobals * G,
       else if(!(chain_id2 = PyDict_GetItemString(dict, "chain")))
         result = false;
       else if(!(text_type_id2 = PyDict_GetItemString(dict, "text_type")))
+        result = false;
+      else if(!(custom_id2 = PyDict_GetItemString(dict, "custom")))
         result = false;
       else if(!(ss_id2 = PyDict_GetItemString(dict, "ss")))
         result = false;
@@ -1174,6 +1189,23 @@ int PAlterAtom(PyMOLGlobals * G,
             OVreturn_word result = OVLexicon_GetFromCString(G->Lexicon, temp);
             if(OVreturn_IS_OK(result)) {
               at->textType = result.word;
+            }
+          }
+        }
+      }
+      if(custom_id1 != custom_id2) {
+
+        OrthoLineType temp;
+        if(at->custom) {
+          OVLexicon_DecRef(G->Lexicon, at->custom);
+        }
+        at->custom = 0;
+
+        if(PConvPyObjectToStrMaxLen(custom_id2, temp, sizeof(OrthoLineType) - 1)) {
+          if(temp[0]) {
+            OVreturn_word result = OVLexicon_GetFromCString(G->Lexicon, temp);
+            if(OVreturn_IS_OK(result)) {
+              at->custom = result.word;
             }
           }
         }
@@ -1341,6 +1373,11 @@ int PLabelAtom(PyMOLGlobals * G, AtomInfoType * at, char *model, char *expr, int
     if(at->textType)
       st = OVLexicon_FetchCString(G->Lexicon, at->textType);
     PConvStringToPyDictItem(dict, "text_type", st);
+
+    st = null_st;
+    if(at->custom)
+      st = OVLexicon_FetchCString(G->Lexicon, at->custom);
+    PConvStringToPyDictItem(dict, "custom", st);
 
     st = null_st;
     if(at->label)
@@ -2465,7 +2502,7 @@ void PExit(PyMOLGlobals * G, int code)
      so for the time being, let's just take the process down at this
      point, instead of allowing PyExit to be called. */
 
-  exit(EXIT_SUCCESS);
+  exit(code);
 
   Py_Exit(code);
 }
@@ -2478,8 +2515,10 @@ void PParse(PyMOLGlobals * G, char *str)
 void PDo(PyMOLGlobals * G, char *str)
 {                               /* assumes we already hold the re-entrant API lock */
   int blocked;
+  PyObject *ret ;
   blocked = PAutoBlock(G);
-  Py_XDECREF(PyObject_CallFunction(G->P_inst->cmd_do, "s", str));
+  ret = PyObject_CallFunction(G->P_inst->cmd_do, "s", str);
+  Py_XDECREF(ret);
   PAutoUnblock(G, blocked);
 }
 
@@ -2494,7 +2533,7 @@ void PLog(PyMOLGlobals * G, char *str, int format)
   int blocked;
   PyObject *log;
   OrthoLineType buffer = "";
-  mode = (int) SettingGet(G, cSetting_logging);
+  mode = SettingGetGlobal_i(G, cSetting_logging);
   if(mode) {
     blocked = PAutoBlock(G);
     log = PyDict_GetItemString(P_pymol_dict, P_log_file_str);
@@ -2551,7 +2590,7 @@ void PLogFlush(PyMOLGlobals * G)
   int mode;
   PyObject *log;
   int blocked;
-  mode = (int) SettingGet(G, cSetting_logging);
+  mode = SettingGetGlobal_i(G, cSetting_logging);
   if(mode) {
     blocked = PAutoBlock(G);
     log = PyDict_GetItemString(P_pymol_dict, P_log_file_str);
@@ -2566,14 +2605,23 @@ int PFlush(PyMOLGlobals * G)
 {
   /* NOTE: ASSUMES unblocked Python threads and a locked API */
   PyObject *err;
-  char buffer[OrthoLineLength + 1];
   int did_work = false;
   if(OrthoCommandWaiting(G)) {
     did_work = true;
     PBlock(G);
     if(!(PIsGlutThread() && G->P_inst->glut_thread_keep_out)) {
       /* don't run if we're currently banned */
-      while(OrthoCommandOut(G, buffer)) {
+      char *buffer = 0;
+      int size, curSize = 0;
+      while(size = OrthoCommandOutSize(G)){
+	if (!curSize){
+	  buffer = VLACalloc(char, size);
+	  curSize = size;
+	} else if (size < curSize){
+	  VLASize(buffer, char, size);
+	  curSize = size;
+	}
+	OrthoCommandOut(G, buffer);
         OrthoCommandNest(G, 1);
         PUnlockAPIWhileBlocked(G);
         if(PyErr_Occurred()) {
@@ -2594,6 +2642,8 @@ int PFlush(PyMOLGlobals * G)
           PFlushFast(G);
         OrthoCommandNest(G, -1);
       }
+      if (buffer)
+	VLAFreeP(buffer);
     }
     PUnblock(G);
   }
@@ -2604,9 +2654,18 @@ int PFlushFast(PyMOLGlobals * G)
 {
   /* NOTE: ASSUMES we currently have blocked Python threads and an unlocked API */
   PyObject *err;
-  char buffer[OrthoLineLength + 1];
   int did_work = false;
-  while(OrthoCommandOut(G, buffer)) {
+  char *buffer = 0;
+  int size, curSize = 0;
+  while(size = OrthoCommandOutSize(G)){
+    if (!curSize){
+      buffer = VLACalloc(char, size);
+      curSize = size;
+    } else if (size < curSize){
+      VLASize(buffer, char, size);
+      curSize = size;
+    }
+    OrthoCommandOut(G, buffer);
     OrthoCommandNest(G, 1);
     did_work = true;
     PRINTFD(G, FB_Threads)
@@ -2630,6 +2689,9 @@ int PFlushFast(PyMOLGlobals * G)
       PFlushFast(G);
     OrthoCommandNest(G, -1);
   }
+  if (buffer)
+    VLAFreeP(buffer);
+
   return did_work;
 }
 
@@ -2647,8 +2709,8 @@ void PBlock(PyMOLGlobals * G)
 {
 
   if(!PAutoBlock(G)) {
-    int *p = 0;
-    *p = 0;
+    // int *p = 0;
+    //  *p = 0;
     ErrFatal(G, "PBlock", "Threading error detected.  Terminating...");
   }
 }
@@ -2680,7 +2742,7 @@ int PAutoBlock(PyMOLGlobals * G)
       PyEval_AcquireLock();
 
       PRINTFD(G, FB_Threads)
-        " PAutoBlock-DEBUG: restoring 0x%x\n", id ENDFD;
+        " PAutoBlock-DEBUG (NewThreads): restoring 0x%x\n", id ENDFD;
 
       PyThreadState_Swap((SavedThread + a)->state);
 

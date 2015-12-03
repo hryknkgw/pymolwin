@@ -26,6 +26,7 @@ Z* -------------------------------------------------------------------
 	active vertex = (opposite of closed)
 
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -1634,7 +1635,7 @@ static int TriangleFill(TriangleSurfaceRec * II, float *v, float *vn, int n,
   while(ok && (lastTri3 != I->nTri)) {
     lastTri3 = I->nTri;
     n_pass++;
-    if(n_pass > (int) SettingGet(I->G, cSetting_triangle_max_passes))
+    if(n_pass > SettingGetGlobal_i(I->G, cSetting_triangle_max_passes))
       break;
 
     I->nActive = 0;

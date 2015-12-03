@@ -168,20 +168,15 @@ if pymol_launch != 3: # if this isn't a dry run
         pymol_launch = -1 # non-threaded launch import flag
         # NOTE: overrides current value (if any)
         
-        try_again = 0
+        # make sure we import pymol from correct path
+        pymol_base = os.path.dirname(os.path.realpath(__file__))
+        site_packages = os.path.dirname(pymol_base)
+        if pymol_base in sys.path:
+            sys.path.remove(pymol_base)
+        if site_packages not in sys.path:
+            sys.path.insert(0, site_packages)
 
-        try:
-            import pymol
-        except ImportError:
-            try_again = 1
-
-        if try_again: # insert directory with this file into search path
-            try:
-                sys.exc_clear()
-                sys.path.insert(0,os.path.dirname(os.path.dirname(__file__)))
-            except:
-                pass
-            import pymol
+        import pymol
         
         pymol_launch = 1 # consume main thread for use by PyMOL
     
@@ -218,8 +213,13 @@ if pymol_launch != 3: # if this isn't a dry run
         # Python exception type for PyMOL commands
         
         class CmdException:
-            def __init__(self,args=None):
+            label = "Error"
+            def __init__(self, args=None, label=None):
                 self.args = args
+                if label:
+                    self.label = label
+            def __str__(self):
+                return " %s: %s" % (self.label, self.args)
         
         class Scratch_Storage:
             pass
@@ -288,8 +288,6 @@ if pymol_launch != 3: # if this isn't a dry run
                     for a in self.invocation.options.deferred:
                         if a[0:4]=="_do_":
                             cmd.do(a[4:])
-                        elif re.search(r"pymol\.py$",a):
-                            pass
                         elif re.search(r"\.py$|\.pym|\.pyc$",a,re.I):
                             cmd.do("_ run %s" % a)
                         elif cmd.file_ext_re.search(a):
@@ -327,56 +325,74 @@ if pymol_launch != 3: # if this isn't a dry run
             (vendor,renderer,version) = cmd.get_renderer()
 
             # Quadro cards don't support GL_BACK in stereo contexts
-            if vendor[0:6]=='NVIDIA':
+            if vendor.startswith('NVIDIA'):
                 if 'Quadro' in renderer:
                     if invocation.options.show_splash:
                         print " Adapting to Quadro hardware."
-                    cmd.set('stereo_double_pump_mono',1)                    
+                    cmd.set('stereo_double_pump_mono',1)
+                    cmd.set('cylinder_shader_ff_workaround', 1)
 
-            elif vendor[0:4]=='Mesa':
+            elif vendor.startswith('Mesa'):
                 if renderer[0:18]=='Mesa GLX Indirect':
                     pass
 
-            elif vendor[0:9]=='Parallels':
+            elif vendor.startswith('Parallels'):
                 if renderer[0:8]=='Parallel':
                     pass
                     # this was critical for older Parallels
                     # but actually slows down current versions
                     # cmd.set('texture_fonts',1) 
 
-            elif vendor[0:3]=='ATI':
+            elif vendor.startswith('ATI'):
                 if renderer[0:17]=='FireGL2 / FireGL3':  # obsolete ?
                     if invocation.options.show_splash:
                         print " Adapting to FireGL hardware."
                     cmd.set('line_width','2',quiet=1)            
 
-                if sys.platform[0:3]=='win':
+                if sys.platform.startswith('win'):
                     if sys.getwindowsversion()[0]>5:
                         # prevent color corruption by calling glFlush etc.
                         cmd.set('ati_bugs',1) 
                         
                 if 'Radeon HD' in renderer:
-                    #print " Note: Radeon HD cards tend not to run PyMOL well."
-                    #print " Use nVidia or Intel instead, if OpenGL glitches occur."
                     print " Adjusting settings to improve performance for ATI cards."
 
                     # use display lists to minimize use of OpenGL
                     # immediate mode rendering (unreasonably slow on
                     # Radeon HD cards!)
-                    cmd.set("use_display_lists") 
+                    if cmd.get_setting_int("use_shaders")==0:
+                        cmd.set("use_display_lists") 
 
-                    # disable line smooothing to prevent various
-                    # bizarre screen-update and drawing artifacts
-                    cmd.unset("line_smooth")
+                        # limit frame rate to 30 fps to avoid ATI "jello"
+                        # where screen updates fall way behind the user.
+                        cmd.set("max_ups",30) 
 
-                    # limit frame rate to 30 fps to avoid ATI "jello"
-                    # where screen updates fall way behind the user.
-                    cmd.set("max_ups",30) 
-
-            elif vendor[0:9]=='Microsoft':
+            elif vendor.startswith('Microsoft'):
                 if renderer[0:17]=='GDI Generic':
                     cmd.set('light_count',1)
                     cmd.set('spec_direct',0.7)
+
+            elif vendor.startswith("Intel"):
+
+                print " Adjusting settings to improve performance for Intel cards."
+                
+                # disable shaders until Intel gets its act together
+
+                cmd.set("use_shaders", 0)
+                cmd.set("sphere_mode", 0)
+
+            elif vendor == 'nouveau':
+                cmd.set("use_shaders", 0)
+                cmd.set("sphere_mode", 0)
+
+            else:
+                if ("Intel" in renderer) and (("HD" in renderer) or ("Express" in renderer)):
+
+                    # catch DRI via the Intel chipsets
+
+                    cmd.set("use_shaders", 0)
+                    cmd.set("sphere_mode", 0)
+                    
 
             # find out how many processors we have, and adjust hash
             # table size to reflect available RAM
@@ -469,8 +485,14 @@ if pymol_launch != 3: # if this isn't a dry run
         _cmd.runpymol(_COb,block_input_hook) # only returns if we are running pretend GLUT
 #      from pymol.embed import wxpymol # never returns
 
-    import _cmd
-    import cmd
+    try:
+        # try to do global import of built-in module
+        _cmd = __import__('_cmd', level=0)
+    except ImportError:
+        # import shared library
+        from pymol import _cmd
+
+    from pymol import cmd
 
     global _COb
 

@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_python.h"
@@ -57,6 +58,7 @@ int SymmetryFromPyList(CSymmetry * I, PyObject * list)
 #else
   int ok = true;
   ov_size ll;
+  PyObject *secondval;
 
   if(ok)
     ok = (I != NULL);
@@ -68,10 +70,19 @@ int SymmetryFromPyList(CSymmetry * I, PyObject * list)
     ok = PyList_Check(list);
   if(ok)
     ll = PyList_Size(list);
-  if(ok)
-    ok = CrystalFromPyList(I->Crystal, PyList_GetItem(list, 0));
-  if(ok)
-    ok = PConvPyStrToStr(PyList_GetItem(list, 1), I->SpaceGroup, sizeof(WordType));
+  if (ok && ll>=2){
+    secondval = PyList_GetItem(list, 1);
+    if (PyList_Check(secondval)){
+      /* if only the crystal, read it */
+      if(ok)
+	ok = CrystalFromPyList(I->Crystal, list);    
+    } else {
+      if(ok)
+	ok = CrystalFromPyList(I->Crystal, PyList_GetItem(list, 0));
+      if(ok)
+	PConvPyStrToStr(PyList_GetItem(list, 1), I->SpaceGroup, sizeof(WordType));
+    }
+  }
   if(ok) {
     ok = SymmetryAttemptGeneration(I, true);
   }
@@ -127,9 +138,12 @@ int SymmetryAttemptGeneration(CSymmetry * I, int quiet)
       CrystalDump(I->Crystal);
     }
   }
+  /* TAKEN OUT BB 2/2012  SpaceGroup can be blank, 
+     sg_sym_to_mat_list has a blank entry with no operations
   if(!I->SpaceGroup[0]) {
     ErrMessage(G, "Symmetry", "Missing space group symbol");
-  } else if(P_xray) {
+    } else */
+  if(P_xray) {
     int blocked = PAutoBlock(G);
     mats = PyObject_CallMethod(P_xray, "sg_sym_to_mat_list", "s", I->SpaceGroup);
     if(mats && (mats != Py_None)) {
@@ -169,6 +183,14 @@ void SymmetryFree(CSymmetry * I)
   OOFreeP(I);
 }
 
+void SymmetryClear(CSymmetry * I)
+{
+  if(I->Crystal)
+    CrystalFree(I->Crystal);
+  VLAFreeP(I->SymMatVLA);
+  VLAFreeP(I->SymOpVLA);
+}
+
 void SymmetryReset(CSymmetry * I)
 {
   I->SpaceGroup[0] = 0;
@@ -203,8 +225,19 @@ CSymmetry *SymmetryCopy(CSymmetry * other)
   return (I);
 }
 
+CSymmetry *SymmetryCopyTo(CSymmetry *other, CSymmetry *I)
+{
+  UtilCopyMem(I, other, sizeof(CSymmetry));
+  I->Crystal = CrystalCopy(I->Crystal);
+  I->SymMatVLA = VLACopy(I->SymMatVLA, float);
+  I->SymOpVLA = VLACopy(I->SymOpVLA, WordType);
+  return (I);
+}
+
 void SymmetryUpdate(CSymmetry * I)
 {
+  if(I->Crystal)
+    CrystalUpdate(I->Crystal);
 }
 
 void SymmetryDump(CSymmetry * I)

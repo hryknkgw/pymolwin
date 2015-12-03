@@ -22,6 +22,38 @@ Z* -------------------------------------------------------------------
 #include"Vector.h"
 #include"Matrix.h"
 
+#define MASK_01010101 (((unsigned long)(-1))/3)
+#define MASK_00110011 (((unsigned long)(-1))/5)
+#define MASK_00001111 (((unsigned long)(-1))/17)
+#define MASK_11111111 (((unsigned long)(-1))/257)
+
+#define MASK_01010101010101010101010101010101 MASK_01010101
+#define MASK_00110011001100110011001100110011 MASK_00110011
+#define MASK_00001111000011110000111100001111 MASK_00001111
+#define MASK_00000000111111110000000011111111 MASK_11111111
+#define MASK_00000000000000001111111111111111 (((unsigned long)(-1))/65537)
+
+short countBits(unsigned long bits){
+  unsigned long n = bits;
+  n = (n & MASK_01010101010101010101010101010101) + ((n >> 1) & MASK_01010101010101010101010101010101) ;
+  n = (n & MASK_00110011001100110011001100110011) + ((n >> 2) & MASK_00110011001100110011001100110011) ;
+  n = (n & MASK_00001111000011110000111100001111) + ((n >> 4) & MASK_00001111000011110000111100001111) ;
+  n = (n & MASK_00000000111111110000000011111111) + ((n >> 8) & MASK_00000000111111110000000011111111) ;
+  n = (n & MASK_00000000000000001111111111111111) + ((n >> 16) & MASK_00000000000000001111111111111111) ;
+  return (n % 255);
+}
+short countBitsInt(int bits){
+  /* This could be improved to not splitting 
+     the bits into 4 variables in a loop which are 16 bits each */
+  unsigned long n = bits & 65535;
+  short nbits = 0;
+  n = (n & MASK_01010101) + ((n >> 1) & MASK_01010101) ;
+  n = (n & MASK_00110011) + ((n >> 2) & MASK_00110011) ;
+  n = (n & MASK_00001111) + ((n >> 4) & MASK_00001111) ;
+  nbits += (n % 255);
+  return nbits;
+}
+
 #ifndef R_SMALL
 #define R_SMALL 0.000000001
 #endif
@@ -330,6 +362,21 @@ void scale3f(float *v1, float v0, float *v2)
   v2[0] = v1[0] * v0;
   v2[1] = v1[1] * v0;
   v2[2] = v1[2] * v0;
+}
+
+void copy3uc(uchar *v1, uchar *v2)
+{
+  v2[0] = v1[0];
+  v2[1] = v1[1];
+  v2[2] = v1[2];
+}
+
+void copy4uc(uchar *v1, uchar *v2)
+{
+  v2[0] = v1[0];
+  v2[1] = v1[1];
+  v2[2] = v1[2];
+  v2[3] = v1[3];
 }
 
 void copy3f(float *v1, float *v2)
@@ -1890,29 +1937,6 @@ void matrix_inverse_transform33f3f(Matrix33f m1, float *v1, float *v2)
   v2[2] = m1[0][2] * v1[0] + m1[1][2] * v1[1] + m1[2][2] * v1[2];
 }
 
-#if 0
-double matdiffsq(float *v1, oMatrix5f m, float *v2)
-{
-  register double dx, dy, dz;
-  float vx, vy, vz;
-
-  dx = v2[0] - m[3][0];
-  dy = v2[1] - m[3][1];
-  dz = v2[2] - m[3][2];
-
-  vx = m[0][0] * dx + m[0][1] * dy + m[0][2] * dz;
-  vy = m[1][0] * dx + m[1][1] * dy + m[1][2] * dz;
-  vz = m[2][0] * dx + m[2][1] * dy + m[2][2] * dz;
-
-  dx = (v1[0] - (vx + m[4][0]));
-  dy = (v1[1] - (vy + m[4][1]));
-  dz = (v1[2] - (vz + m[4][2]));
-
-  return (dx * dx + dy * dy + dz * dz);
-
-}
-#endif
-
 void transform5f3f(oMatrix5f m, float *v1, float *v2)
 {
   register double dx, dy, dz;
@@ -2153,3 +2177,52 @@ void matrix_to_rotation(Matrix53f rot, float *axis, float *angle)
 #endif
 
 }
+void mult3f(float *vsrc, float val, float *vdest){
+  vdest[0] = vsrc[0] * val;
+  vdest[1] = vsrc[1] * val;
+  vdest[2] = vsrc[2] * val;
+}
+
+void mult4f(float *vsrc, float val, float *vdest){
+  vdest[0] = vsrc[0] * val;
+  vdest[1] = vsrc[1] * val;
+  vdest[2] = vsrc[2] * val;
+  vdest[3] = vsrc[3] * val;
+}
+
+float max3(float val1, float val2, float val3){
+  if (val1>val2){
+    if (val1>val3){
+      return val1;
+    } else {
+      return val3;
+    }
+  } else {
+    if (val2>val3){
+      return val2;
+    } else {
+      return val3;
+    }
+  }
+}
+float ave3(float val1, float val2, float val3){
+  return ((val1+val2+val3)/3.f);
+}
+float ave2(float val1, float val2){
+  return ((val1+val2)/2.f);
+}
+
+void white4f(float *rgba, float value){
+  rgba[0] = value;
+  rgba[1] = value;
+  rgba[2] = value;
+  rgba[3] = 1.0F;
+}
+void add4f(float *v1, float *v2, float *v3)
+{
+  v3[0] = v1[0] + v2[0];
+  v3[1] = v1[1] + v2[1];
+  v3[2] = v1[2] + v2[2];
+  v3[3] = v1[3] + v2[3];
+}
+

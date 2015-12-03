@@ -3,7 +3,7 @@ import sys
 from pymol import opengl
 
 if opengl._numeric:
-    from Numeric import ArrayType
+    from numpy.oldnumeric import ArrayType
     try:
         import _glu_num
         _glu = _glu_num

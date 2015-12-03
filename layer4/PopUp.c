@@ -14,10 +14,11 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 #include"os_predef.h"
 #include"os_std.h"
 #include"os_gl.h"
-#include"os_python.h"
+
 
 #include "OOMac.h"
 
@@ -32,6 +33,7 @@ Z* -------------------------------------------------------------------
 #include "Color.h"
 #include "Text.h"
 #include "PyMOL.h"
+#include "CGO.h"
 
 #define cPopUpLineHeight 17
 #define cPopUpTitleHeight 19
@@ -67,7 +69,7 @@ typedef struct CPopUp {
 } CPopUp;
 
 int PopUpRelease(Block * block, int button, int x, int y, int mod);
-void PopUpDraw(Block * block);
+void PopUpDraw(Block * block ORTHOCGOARG);
 int PopUpDrag(Block * block, int x, int y, int mod);
 int PopUpConvertY(CPopUp * I, int value, int mode);
 
@@ -225,6 +227,7 @@ Block *PopUpNew(PyMOLGlobals * G, int x, int y, int last_x, int last_y,
 
   PAutoUnblock(G, blocked);
 
+  OrthoInvalidateDoDraw(G);  
   return I->Block;
 #endif
 
@@ -477,6 +480,7 @@ int PopUpDrag(Block * block, int x, int y, int mod)
             I->Child = NULL;
             I->ChildLine = -1;
             OrthoDirty(G);
+	    OrthoInvalidateDoDraw(G);
           } else {
             I->Selected = a;
           }
@@ -538,19 +542,22 @@ int PopUpDrag(Block * block, int x, int y, int mod)
       I->DirtyDelayFlag = true;
       I->DirtyDelay = UtilGetSeconds(G) + cDirtyDelay;
     }
-    if(!I->DirtyDelayFlag)
+    if(!I->DirtyDelayFlag){
       OrthoDirty(G);
+      OrthoInvalidateDoDraw(G);
+    }
   }
   if(I->DirtyDelayFlag && (I->DirtyDelay < UtilGetSeconds(G))) {
     I->DirtyDelayFlag = false;
     OrthoDirty(G);
+    OrthoInvalidateDoDraw(G);
   }
   return (1);
 }
 
 
 /*========================================================================*/
-void PopUpDraw(Block * block)
+void PopUpDraw(Block * block ORTHOCGOARG)
 {
   CPopUp *I = (CPopUp *) block->reference;
   PyMOLGlobals *G = block->G;
@@ -564,81 +571,164 @@ void PopUpDraw(Block * block)
 
     /* put raised border around pop-up menu */
 
-    /* bottom */
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.2F, 0.2F, 0.4F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, block->rect.left - 2, block->rect.bottom - 2, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 2, block->rect.bottom - 2, 0.f);
+      CGOVertex(orthoCGO, block->rect.left - 2, block->rect.bottom + 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 2, block->rect.bottom + 1, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.2F, 0.2F, 0.4F);
+      glBegin(GL_POLYGON);
+      glVertex2i(block->rect.left - 2, block->rect.bottom - 2);
+      glVertex2i(block->rect.right + 2, block->rect.bottom - 2);
+      glVertex2i(block->rect.right + 2, block->rect.bottom + 1);
+      glVertex2i(block->rect.left - 2, block->rect.bottom + 1);
+      glEnd();
+    }
 
-    glColor3f(0.2F, 0.2F, 0.4F);
-    glBegin(GL_POLYGON);
-    glVertex2i(block->rect.left - 2, block->rect.bottom - 2);
-    glVertex2i(block->rect.right + 2, block->rect.bottom - 2);
-    glVertex2i(block->rect.right + 2, block->rect.bottom + 1);
-    glVertex2i(block->rect.left - 2, block->rect.bottom + 1);
-    glEnd();
-
-    glColor3f(0.4F, 0.4F, 0.6F);
-    glBegin(GL_POLYGON);
-    glVertex2i(block->rect.left - 1, block->rect.bottom - 1);
-    glVertex2i(block->rect.right + 1, block->rect.bottom - 1);
-    glVertex2i(block->rect.right + 1, block->rect.bottom + 1);
-    glVertex2i(block->rect.left - 1, block->rect.bottom + 1);
-    glEnd();
-
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.4F, 0.4F, 0.6F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, block->rect.left - 1, block->rect.bottom - 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 1, block->rect.bottom - 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.left - 1, block->rect.bottom + 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 1, block->rect.bottom + 1, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.4F, 0.4F, 0.6F);
+      glBegin(GL_POLYGON);
+      glVertex2i(block->rect.left - 1, block->rect.bottom - 1);
+      glVertex2i(block->rect.right + 1, block->rect.bottom - 1);
+      glVertex2i(block->rect.right + 1, block->rect.bottom + 1);
+      glVertex2i(block->rect.left - 1, block->rect.bottom + 1);
+      glEnd();
+    }
     /* right */
 
-    glColor3f(0.2F, 0.2F, 0.4F);
-    glBegin(GL_POLYGON);
-    glVertex2i(block->rect.right, block->rect.bottom - 2);
-    glVertex2i(block->rect.right + 2, block->rect.bottom - 2);
-    glVertex2i(block->rect.right + 2, block->rect.top);
-    glVertex2i(block->rect.right, block->rect.top);
-    glEnd();
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.2F, 0.2F, 0.4F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, block->rect.right, block->rect.bottom - 2, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 2, block->rect.bottom - 2, 0.f);
+      CGOVertex(orthoCGO, block->rect.right, block->rect.top, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 2, block->rect.top, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.2F, 0.2F, 0.4F);
+      glBegin(GL_POLYGON);
+      glVertex2i(block->rect.right, block->rect.bottom - 2);
+      glVertex2i(block->rect.right + 2, block->rect.bottom - 2);
+      glVertex2i(block->rect.right + 2, block->rect.top);
+      glVertex2i(block->rect.right, block->rect.top);
+      glEnd();
+    }
 
-    glColor3f(0.4F, 0.4F, 0.6F);
-    glBegin(GL_POLYGON);
-    glVertex2i(block->rect.right, block->rect.bottom - 1);
-    glVertex2i(block->rect.right + 1, block->rect.bottom - 1);
-    glVertex2i(block->rect.right + 1, block->rect.top);
-    glVertex2i(block->rect.right, block->rect.top);
-    glEnd();
-
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.4F, 0.4F, 0.6F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, block->rect.right, block->rect.bottom - 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 1, block->rect.bottom - 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.right, block->rect.top, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 1, block->rect.top, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.4F, 0.4F, 0.6F);
+      glBegin(GL_POLYGON);
+      glVertex2i(block->rect.right, block->rect.bottom - 1);
+      glVertex2i(block->rect.right + 1, block->rect.bottom - 1);
+      glVertex2i(block->rect.right + 1, block->rect.top);
+      glVertex2i(block->rect.right, block->rect.top);
+      glEnd();
+    }
     /* top */
 
-    glColor3f(0.5F, 0.5F, 0.7F);
-    glBegin(GL_POLYGON);
-    glVertex2i(block->rect.left - 2, block->rect.top + 2);
-    glVertex2i(block->rect.right + 2, block->rect.top + 2);
-    glVertex2i(block->rect.right + 2, block->rect.top);
-    glVertex2i(block->rect.left - 2, block->rect.top);
-    glEnd();
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.5F, 0.5F, 0.7F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, block->rect.left - 2, block->rect.top + 2, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 2, block->rect.top + 2, 0.f);
+      CGOVertex(orthoCGO, block->rect.left - 2, block->rect.top, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 2, block->rect.top, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.5F, 0.5F, 0.7F);
+      glBegin(GL_POLYGON);
+      glVertex2i(block->rect.left - 2, block->rect.top + 2);
+      glVertex2i(block->rect.right + 2, block->rect.top + 2);
+      glVertex2i(block->rect.right + 2, block->rect.top);
+      glVertex2i(block->rect.left - 2, block->rect.top);
+      glEnd();
+    }
 
-    glColor3f(0.6F, 0.6F, 0.8F);
-    glBegin(GL_POLYGON);
-    glVertex2i(block->rect.left - 1, block->rect.top + 1);
-    glVertex2i(block->rect.right + 1, block->rect.top + 1);
-    glVertex2i(block->rect.right + 1, block->rect.top);
-    glVertex2i(block->rect.left - 1, block->rect.top);
-    glEnd();
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.6F, 0.6F, 0.8F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, block->rect.left - 1, block->rect.top + 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 1, block->rect.top + 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.left - 1, block->rect.top, 0.f);
+      CGOVertex(orthoCGO, block->rect.right + 1, block->rect.top, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.6F, 0.6F, 0.8F);
+      glBegin(GL_POLYGON);
+      glVertex2i(block->rect.left - 1, block->rect.top + 1);
+      glVertex2i(block->rect.right + 1, block->rect.top + 1);
+      glVertex2i(block->rect.right + 1, block->rect.top);
+      glVertex2i(block->rect.left - 1, block->rect.top);
+      glEnd();
+    }
 
     /* left */
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.5F, 0.5F, 0.7F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, block->rect.left - 2, block->rect.bottom - 2, 0.f);
+      CGOVertex(orthoCGO, block->rect.left, block->rect.bottom, 0.f);
+      CGOVertex(orthoCGO, block->rect.left - 2, block->rect.top, 0.f);
+      CGOVertex(orthoCGO, block->rect.left, block->rect.top, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.5F, 0.5F, 0.7F);
+      glBegin(GL_POLYGON);
+      glVertex2i(block->rect.left - 2, block->rect.bottom - 2);
+      glVertex2i(block->rect.left, block->rect.bottom);
+      glVertex2i(block->rect.left, block->rect.top);
+      glVertex2i(block->rect.left - 2, block->rect.top);
+      glEnd();
+    }
 
-    glColor3f(0.5F, 0.5F, 0.7F);
-    glBegin(GL_POLYGON);
-    glVertex2i(block->rect.left - 2, block->rect.bottom - 2);
-    glVertex2i(block->rect.left, block->rect.bottom);
-    glVertex2i(block->rect.left, block->rect.top);
-    glVertex2i(block->rect.left - 2, block->rect.top);
-    glEnd();
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.6F, 0.6F, 0.8F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, block->rect.left - 1, block->rect.bottom - 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.left, block->rect.bottom - 1, 0.f);
+      CGOVertex(orthoCGO, block->rect.left, block->rect.top, 0.f);
+      CGOVertex(orthoCGO, block->rect.left - 1, block->rect.top, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.6F, 0.6F, 0.8F);
+      glBegin(GL_POLYGON);
+      glVertex2i(block->rect.left - 1, block->rect.bottom - 1);
+      glVertex2i(block->rect.left, block->rect.bottom - 1);
+      glVertex2i(block->rect.left, block->rect.top);
+      glVertex2i(block->rect.left - 1, block->rect.top);
+      glEnd();
+    }
 
-    glColor3f(0.6F, 0.6F, 0.8F);
-    glBegin(GL_POLYGON);
-    glVertex2i(block->rect.left - 1, block->rect.bottom - 1);
-    glVertex2i(block->rect.left, block->rect.bottom - 1);
-    glVertex2i(block->rect.left, block->rect.top);
-    glVertex2i(block->rect.left - 1, block->rect.top);
-    glEnd();
+    if (orthoCGO)
+      CGOColorv(orthoCGO, block->BackColor);
+    else
+      glColor3fv(block->BackColor);
 
-    glColor3fv(block->BackColor);
-    BlockFill(block);
-    glColor3fv(block->TextColor);
+    BlockFill(block ORTHOCGOARGVAR);
+
+    if (orthoCGO)
+      CGOColorv(orthoCGO, block->TextColor);
+    else
+      glColor3fv(block->TextColor);
 
     if(I->Selected >= 0) {
 
@@ -646,6 +736,14 @@ void PopUpDraw(Block * block)
       y = I->Block->rect.top - PopUpConvertY(I, I->Selected, true) - cPopUpCharMargin;
 
       y += 2;
+    if (orthoCGO){
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, x, y, 0.f);
+      CGOVertex(orthoCGO, x + I->Width - 1, y, 0.f);
+      CGOVertex(orthoCGO, x, y - (cPopUpLineHeight + 3), 0.f);
+      CGOVertex(orthoCGO, x + I->Width - 1, y - (cPopUpLineHeight + 3), 0.f);
+      CGOEnd(orthoCGO);
+    } else {
       glBegin(GL_POLYGON);
       glVertex2i(x, y);
       glVertex2i(x + I->Width - 1, y);
@@ -653,30 +751,54 @@ void PopUpDraw(Block * block)
       glVertex2i(x, y - (cPopUpLineHeight + 3));
       glEnd();
     }
-
+    }
     if(I->Code[0] == 2) {       /* menu name */
 
       if(!SettingGetGlobal_i(G, cSetting_internal_gui_mode)) {
-        glColor3f(0.3F, 0.3F, 0.6F);
+	if (orthoCGO)
+	  CGOColor(orthoCGO, 0.3F, 0.3F, 0.6F);
+	else
+	  glColor3f(0.3F, 0.3F, 0.6F);
       } else {
-        glColor3f(1.0F, 1.0F, 1.0F);
+	if (orthoCGO)
+	  CGOColor(orthoCGO, 1.0F, 1.0F, 1.0F);
+	else
+	  glColor3f(1.0F, 1.0F, 1.0F);
       }
       x = I->Block->rect.left;
       y = I->Block->rect.top;
 
-      glBegin(GL_POLYGON);
-      glVertex2i(x, y);
-      glVertex2i(x + I->Width, y);
-      glVertex2i(x + I->Width, y - (cPopUpLineHeight + cPopUpCharMargin));
-      glVertex2i(x, y - (cPopUpLineHeight + cPopUpCharMargin));
-      glEnd();
+      if (orthoCGO){
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x, y, 0.f);
+	CGOVertex(orthoCGO, x + I->Width, y, 0.f);
+	CGOVertex(orthoCGO, x, y - (cPopUpLineHeight + cPopUpCharMargin), 0.f);
+	CGOVertex(orthoCGO, x + I->Width, y - (cPopUpLineHeight + cPopUpCharMargin), 0.f);
+	CGOEnd(orthoCGO);
+      } else {
+	glBegin(GL_POLYGON);
+	glVertex2i(x, y);
+	glVertex2i(x + I->Width, y);
+	glVertex2i(x + I->Width, y - (cPopUpLineHeight + cPopUpCharMargin));
+	glVertex2i(x, y - (cPopUpLineHeight + cPopUpCharMargin));
+	glEnd();
+      }
 
-      glColor3f(0.2F, 0.2F, 0.4F);
-      glBegin(GL_LINES);
-      glVertex2i(x + I->Width - 1, y - (cPopUpLineHeight + cPopUpCharMargin));
-      glVertex2i(x, y - (cPopUpLineHeight + cPopUpCharMargin));
-      glEnd();
-
+      if (orthoCGO){
+	CGOColor(orthoCGO, 0.2F, 0.2F, 0.4F);
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x + I->Width - 1, y - (cPopUpLineHeight + cPopUpCharMargin), 0.f);
+	CGOVertex(orthoCGO, x + I->Width - 1, y - (cPopUpLineHeight + cPopUpCharMargin) - 1.f, 0.f);
+	CGOVertex(orthoCGO, x, y - (cPopUpLineHeight + cPopUpCharMargin), 0.f);
+	CGOVertex(orthoCGO, x, y - (cPopUpLineHeight + cPopUpCharMargin) - 1.f, 0.f);
+	CGOEnd(orthoCGO);
+      } else {
+	glColor3f(0.2F, 0.2F, 0.4F);
+	glBegin(GL_LINES);
+	glVertex2i(x + I->Width - 1, y - (cPopUpLineHeight + cPopUpCharMargin));
+	glVertex2i(x, y - (cPopUpLineHeight + cPopUpCharMargin));
+	glEnd();
+      }
     }
 
     x = I->Block->rect.left + cPopUpCharMargin;
@@ -712,55 +834,107 @@ void PopUpDraw(Block * block)
                 }
 
           TextSetPos2i(G, xx, y + cPopUpCharLift);
-          TextDrawChar(G, *(c++));
+          TextDrawChar(G, *(c++) ORTHOCGOARGVAR);
           xx = xx + 8;
         }
 
         if(I->Sub[a]) {
 
-          glBegin(GL_POLYGON);
-          glColor3f(0.4F, 0.4F, 0.4F);
-          glVertex2i(I->Block->rect.left - 3, y + 1);
-          glColor3f(0.1F, 0.1F, 0.1F);
-          glVertex2i(I->Block->rect.left, y + 1);
-          glVertex2i(I->Block->rect.left, y + ((cPopUpLineHeight)) - 4);
-          glColor3f(0.4F, 0.4F, 0.4F);
-          glVertex2i(I->Block->rect.left - 3, y + ((cPopUpLineHeight)) - 4);
-          glEnd();
-
-          glBegin(GL_POLYGON);
-          glColor3f(0.1F, 0.2F, 0.2F);
-          glVertex2i(I->Block->rect.right, y + 1);
-          glColor3f(0.4F, 0.4F, 0.4F);
-          glVertex2i(I->Block->rect.right + 3, y + 1);
-          glVertex2i(I->Block->rect.right + 3, y + ((cPopUpLineHeight)) - 4);
-          glColor3f(0.1F, 0.2F, 0.2F);
-          glVertex2i(I->Block->rect.right, y + ((cPopUpLineHeight)) - 4);
-          glEnd();
-
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	    CGOColor(orthoCGO, 0.4F, 0.4F, 0.4F);
+	    CGOVertex(orthoCGO, I->Block->rect.left - 3, y + ((cPopUpLineHeight)) - 4, 0.f);
+	    CGOColor(orthoCGO, 0.4F, 0.4F, 0.4F);
+	    CGOVertex(orthoCGO, I->Block->rect.left - 3, y + 1, 0.f);
+	    CGOColor(orthoCGO, 0.1F, 0.1F, 0.1F);
+	    CGOVertex(orthoCGO, I->Block->rect.left, y + ((cPopUpLineHeight)) - 4, 0.f);
+	    CGOColor(orthoCGO, 0.1F, 0.1F, 0.1F);
+	    CGOVertex(orthoCGO, I->Block->rect.left, y + 1, 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_POLYGON);
+	    glColor3f(0.4F, 0.4F, 0.4F);
+	    glVertex2i(I->Block->rect.left - 3, y + 1);
+	    glColor3f(0.1F, 0.1F, 0.1F);
+	    glVertex2i(I->Block->rect.left, y + 1);
+	    glVertex2i(I->Block->rect.left, y + ((cPopUpLineHeight)) - 4);
+	    glColor3f(0.4F, 0.4F, 0.4F);
+	    glVertex2i(I->Block->rect.left - 3, y + ((cPopUpLineHeight)) - 4);
+	    glEnd();
+	  }
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	    CGOColor(orthoCGO, 0.1F, 0.2F, 0.2F);
+	    CGOVertex(orthoCGO, I->Block->rect.right, y + 1, 0.f);
+	    CGOColor(orthoCGO, 0.4F, 0.4F, 0.4F);
+	    CGOVertex(orthoCGO, I->Block->rect.right + 3, y + 1, 0.f);
+	    CGOColor(orthoCGO, 0.1F, 0.2F, 0.2F);
+	    CGOVertex(orthoCGO, I->Block->rect.right, y + ((cPopUpLineHeight)) - 4, 0.f);
+	    CGOColor(orthoCGO, 0.4F, 0.4F, 0.4F);
+	    CGOVertex(orthoCGO, I->Block->rect.right + 3, y + ((cPopUpLineHeight)) - 4, 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_POLYGON);
+	    glColor3f(0.1F, 0.2F, 0.2F);
+	    glVertex2i(I->Block->rect.right, y + 1);
+	    glColor3f(0.4F, 0.4F, 0.4F);
+	    glVertex2i(I->Block->rect.right + 3, y + 1);
+	    glVertex2i(I->Block->rect.right + 3, y + ((cPopUpLineHeight)) - 4);
+	    glColor3f(0.1F, 0.2F, 0.2F);
+	    glVertex2i(I->Block->rect.right, y + ((cPopUpLineHeight)) - 4);
+	    glEnd();
+	  }
         }
 
         y -= cPopUpLineHeight;
         if(I->Code[a] == 2)
           y -= 2;
       } else {
-        glBegin(GL_LINES);
-        glColor3f(0.3F, 0.3F, 0.5F);
-        glVertex2i(I->Block->rect.left,
-                   y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 3);
-        glVertex2i(I->Block->rect.right,
-                   y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 3);
-        glColor3f(0.6F, 0.6F, 0.8F);
-        glVertex2i(I->Block->rect.left,
-                   y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 4);
-        glVertex2i(I->Block->rect.right,
-                   y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 4);
-        glEnd();
+	  if (orthoCGO){
+	    /* two lines between sections in the menu, one light, one dark */
+	    CGOColor(orthoCGO, 0.3F, 0.3F, 0.5F);
+	    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	    CGOVertex(orthoCGO, I->Block->rect.right,
+		      y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 4, 0.f);
+	    CGOVertex(orthoCGO, I->Block->rect.right,
+		      y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 3, 0.f);
+	    CGOVertex(orthoCGO, I->Block->rect.left,
+		      y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 4, 0.f);
+	    CGOVertex(orthoCGO, I->Block->rect.left,
+		      y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 3, 0.f);
+	    CGOEnd(orthoCGO);
+	    CGOColor(orthoCGO, 0.6F, 0.6F, 0.8F);
+	    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	    CGOVertex(orthoCGO, I->Block->rect.right,
+		      y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 5, 0.f);
+	    CGOVertex(orthoCGO, I->Block->rect.right,
+		      y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 4, 0.f);
+	    CGOVertex(orthoCGO, I->Block->rect.left,
+		      y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 5, 0.f);
+	    CGOVertex(orthoCGO, I->Block->rect.left,
+		      y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 4, 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_LINES);
+	    glColor3f(0.3F, 0.3F, 0.5F);
+	    glVertex2i(I->Block->rect.left,
+		       y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 3);
+	    glVertex2i(I->Block->rect.right,
+		       y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 3);
+	    glColor3f(0.6F, 0.6F, 0.8F);
+	    glVertex2i(I->Block->rect.left,
+		       y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 4);
+	    glVertex2i(I->Block->rect.right,
+		       y + ((cPopUpLineHeight + cPopUpCharMargin) / 2) + 4);
+	    glEnd();
+	  }
         y -= cPopUpBarHeight;
       }
-
     }
-    glColor3fv(block->TextColor);
+    if (orthoCGO)
+      CGOColorv(orthoCGO, block->TextColor);
+    else
+      glColor3fv(block->TextColor);
     /*    BlockOutline(block); */
   }
 }

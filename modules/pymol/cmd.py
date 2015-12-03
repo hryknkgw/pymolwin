@@ -100,7 +100,7 @@ if __name__=='pymol.cmd':
     try:
         
         import re
-        import _cmd
+        from pymol import _cmd
         import string
         import thread
         import threading
@@ -185,6 +185,7 @@ if __name__=='pymol.cmd':
         _coordset_update_thread = internal._coordset_update_thread
         _copy_image = internal._copy_image
         _ctrl = internal._ctrl
+        _ctsh = internal._ctsh
         _do = internal._do
         _dump_floats = internal._dump_floats
         _dump_ufloats = internal._dump_ufloats
@@ -304,12 +305,14 @@ if __name__=='pymol.cmd':
 
         ctrl = keyboard.get_ctrl()        
         alt = keyboard.get_alt()
+        ctsh = keyboard.get_ctsh()
 
         selection_sc = lambda sc=Shortcut,gn=get_names:sc(gn('public')+['all'])
         object_sc = lambda sc=Shortcut,gn=get_names:sc(gn('objects'))
         map_sc = lambda sc=Shortcut,gnot=get_names_of_type:sc(gnot('object:map'))
         contour_sc =  lambda sc=Shortcut,gnot=get_names_of_type:sc(
             gnot('object:mesh')+gnot('object:surface'))
+        group_sc = lambda sc=Shortcut,gnot=get_names_of_type:sc(gnot('object:group'))
         
         # Table for argument autocompletion
 

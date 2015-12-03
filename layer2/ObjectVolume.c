@@ -14,17 +14,13 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
 #include"os_gl.h"
 
 #include<math.h>
-
-#if defined(_WIN32) || defined(_WIN64)
-#define fmax(a,b) (((a) > (b)) ? (a) : (b))
-#define fmin(a,b) (((a) < (b)) ? (a) : (b))
-#endif
 
 #include"OOMac.h"
 #include"ObjectVolume.h"
@@ -211,6 +207,7 @@ static int ObjectVolumeStateFromPyList(PyMOLGlobals * G, ObjectVolumeState * I,
 }
 #endif
 
+int ObjectVolumeRampToColor(ObjectVolume * I, int state) ;
 #ifndef _PYMOL_NOPY
 static int ObjectVolumeAllStatesFromPyList(ObjectVolume * I, PyObject * list)
 {
@@ -225,6 +222,7 @@ static int ObjectVolumeAllStatesFromPyList(ObjectVolume * I, PyObject * list)
       ok = ObjectVolumeStateFromPyList(I->Obj.G, I->State + a, PyList_GetItem(list, a));
       if(!ok)
         break;
+      ObjectVolumeRampToColor(I, a);
     }
   }
   return (ok);
@@ -288,6 +286,7 @@ static void ObjectVolumeStateFree(ObjectVolumeState * vs)
     int t;
   ObjectStatePurge(&vs->State);
   if(vs->State.G->HaveGUI) {
+#ifdef _PYMOL_GL_CALLLISTS
     if(vs->displayList) {
       if(PIsGlutThread()) {
         if(vs->State.G->ValidContext) {
@@ -301,19 +300,24 @@ static void ObjectVolumeStateFree(ObjectVolumeState * vs)
         vs->displayList = 0;
       }
     }
+#endif
     for (t=0; t<2; t++) {
       if (vs->textures[t]) {
+        glDeleteTextures(1, (const GLuint *) &vs->textures[t]);
+	vs->textures[t] = 0;
+	/*
         if(PIsGlutThread()) {
           if(vs->State.G->ValidContext) {
-            glDeleteTextures(1, &vs->textures[t]);
+            glDeleteTextures(1, (const GLuint *) &vs->textures[t]);
             vs->textures[t] = 0;
           }
         } else {
-          char buffer[255];       /* pass this off to the main thread */
+          char buffer[255];       // pass this off to the main thread
           sprintf(buffer, "_cmd.gl_delete_texture(cmd._COb,%d)\n", vs->textures[t]);
           PParse(vs->State.G, buffer);
           vs->textures[t] = 0;
         }
+      */
       }
     }
   }
@@ -336,14 +340,20 @@ static void ObjectVolumeStateFree(ObjectVolumeState * vs)
   if (vs->Histogram)
     free(vs->Histogram);
   if (vs->Ramp)
-    free(vs->Ramp);
+    FreeP(vs->Ramp);
   vs->Active = false;
 }
 
 static void ObjectVolumeFree(ObjectVolume * I)
 {
-  int a;
+  int a,i;
   for(a = 0; a < I->NState; a++) {
+    for (i=0; i<2; i++){
+      if (I->State[a].textures[i]){
+       glDeleteTextures(1, (const GLuint *) &I->State[a].textures[i]);
+       I->State[a].textures[i] = 0;
+      }
+    }
     if(I->State[a].Active)
       ObjectVolumeStateFree(I->State + a);
   }
@@ -400,28 +410,6 @@ void ObjectVolumeDump(ObjectVolume * I, char *fname, int state)
       " ObjectVolumeDump: %s written to %s\n", I->Obj.Name, fname ENDFB(I->Obj.G);
   }
 }
-
-#if 0
-static char *ObjectVolumeGetCaption(ObjectVolume * I)
-{
-  int state = ObjectGetCurrentState((CObject *) I, false);
-  if(state >= 0) {
-    if(state < I->NState) {
-      char *p;
-      ObjectVolumeState *vs = I->State + state;
-      sprintf(vs->caption, "@ %1.4f\n", vs->Level);
-      p = vs->caption + strlen(vs->caption);
-      while(p > vs->caption) {
-        p--;
-        if(*p != '0')
-          break;
-      }
-      return vs->caption;
-    }
-  }
-  return NULL;
-}
-#endif
 
 static void ObjectVolumeInvalidate(ObjectVolume * I, int rep, int level, int state)
 {
@@ -584,22 +572,12 @@ static void ObjectVolumeStateUpdateColors(ObjectVolume * I, ObjectVolumeState * 
 static void ObjectVolumeUpdate(ObjectVolume * I)
 {
   int a;
-  int c;
   ObjectVolumeState *vs;
   ObjectMapState *oms = NULL;
   ObjectMap *map = NULL;
-
-  int *n;
-  float *v;
   float carve_buffer;
   int avoid_flag = false;
-  int *old_n;
-  float *old_v;
-  int n_cur;
-  int n_seg;
-  int n_line;
   int flag;
-  int last_flag = 0;
   int h, k, l;
   int i, j;
   int ok = true;
@@ -636,7 +614,7 @@ static void ObjectVolumeUpdate(ObjectVolume * I)
         if(vs->RefreshFlag || vs->ResurfaceFlag) {
           memcpy(vs->Corner, oms->Corner, sizeof(float) * 24);
           if(!vs->Field) {
-            vs->Crystal = *(oms->Crystal);
+            vs->Crystal = *(oms->Symmetry->Crystal);
           }
 
           if(I->Obj.RepVis[cRepCell]) {
@@ -687,7 +665,7 @@ static void ObjectVolumeUpdate(ObjectVolume * I)
                 max_ext = vs->ExtentMax;
               }
 
-              IsosurfGetRange(I->Obj.G, field, oms->Crystal,
+              IsosurfGetRange(I->Obj.G, field, oms->Symmetry->Crystal,
                               min_ext, max_ext, vs->Range, true);
             }
 
@@ -795,6 +773,47 @@ static void ObjectVolumeUpdate(ObjectVolume * I)
 int ObjectVolumeAddSlicePoint(float *p0, float *p1, float *zaxis, float d, float *slice, float *t0, float *t1, float *tex_coords, float *origin);
 void ObjectVolumeDrawSlice(float *points, float *tex_coords, int n_points, float *zaxis);
 
+int ObjectVolumeRampToColor(ObjectVolume * I, int state) {
+  /* Converting Ramp to Colors, used for ObjectVolumeColor */
+  ObjectVolumeState *ovs = NULL;
+  int ncolors;
+  float *colors ;
+  int pl = 0, i, j;
+  int lowerId, upperId, span, lowerc = 1, upperc;
+  float mixc, mixcincr;
+  int ok = true;
+  if (state<0){
+    ovs = I->State;
+  } else {
+    ovs = (I->State + state);
+  }
+  ncolors = 1 + (int)ovs->Ramp[(ovs->RampSize-1)*5];
+  colors = (float*) malloc(4 * ncolors * sizeof(float));
+  CHECKOK(ok, colors);
+  if (ok){
+    lowerId = (int)ovs->Ramp[0];
+    for (i = 1; i<ovs->RampSize; i++){
+      upperId = (int)ovs->Ramp[i*5];
+      upperc = i * 5 + 1;
+      mixc = 1.f;
+      span = upperId - lowerId;
+      mixcincr = 1.f/(float)span;
+      for (j = lowerId; j < upperId; j++){
+	colors[pl++] = ovs->Ramp[lowerc] * mixc + ovs->Ramp[upperc] * (1.f-mixc); 
+	colors[pl++] = ovs->Ramp[lowerc+1] * mixc + ovs->Ramp[upperc+1] * (1.f-mixc); 
+	colors[pl++] = ovs->Ramp[lowerc+2] * mixc + ovs->Ramp[upperc+2] * (1.f-mixc); 
+	colors[pl++] = ovs->Ramp[lowerc+3] * mixc + ovs->Ramp[upperc+3] * (1.f-mixc); 
+	mixc -= mixcincr;
+      }
+      lowerId = upperId;
+      lowerc = upperc;
+    }
+    ObjectVolumeColor(I, colors, 4 * ncolors);
+    free(colors);
+  }
+  return ok;
+}
+
 int ObjectVolumeColor(ObjectVolume * I, float * colors, int ncolors) {
 
   int i;
@@ -813,7 +832,7 @@ int ObjectVolumeColor(ObjectVolume * I, float * colors, int ncolors) {
   }
   
   if(I->NState &&
-     ((SettingGet(I->Obj.G, cSetting_static_singletons) && (I->NState == 1))))
+     ((SettingGetGlobal_b(I->Obj.G, cSetting_static_singletons) && (I->NState == 1))))
     vs = I->State;
 
   PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
@@ -873,19 +892,13 @@ static void ObjectVolumeRender(ObjectVolume * I, RenderInfo * info)
 {
   PyMOLGlobals *G = I->Obj.G;
   float *v = NULL;
-  float *vc;
-  int *rc;
-  float radius;
   int state = info->state;
   CRay *ray = info->ray;
   Picking **pick = info->pick;
   int pass = info->pass;
   int *n = NULL;
-  int c;
   int a = 0;
-  float line_width = SettingGet_f(I->Obj.G, I->Obj.Setting, NULL, cSetting_mesh_width);
   ObjectVolumeState *vs = NULL;
-  register CScene *S = G->Scene;
   int volume_bit_depth =  (int) SettingGet_i(I->Obj.G, I->Obj.Setting, NULL, cSetting_volume_bit_depth);
   float volume_layers =  SettingGet_f(I->Obj.G, I->Obj.Setting, NULL, cSetting_volume_layers);
   /* make this a setting? */
@@ -901,7 +914,7 @@ static void ObjectVolumeRender(ObjectVolume * I, RenderInfo * info)
   int n_points;
   float d, sliceRange, sliceDelta;
   float origin[3];
-  CShaderPrg * p;
+  CShaderPrg *shaderPrg;
 
   /* bail if no shaders */
   if (G && !(CShaderMgr_ShadersPresent(G->ShaderMgr)))
@@ -918,7 +931,6 @@ static void ObjectVolumeRender(ObjectVolume * I, RenderInfo * info)
   /* default back to 16-bit for improper value */
   else
     volume_bit_depth = GL_RGBA16F_ARB;
-
   ObjectPrepareContext(&I->Obj, ray);
 
   if(state >= 0)
@@ -937,7 +949,7 @@ static void ObjectVolumeRender(ObjectVolume * I, RenderInfo * info)
     } else {
       if(!vs) {
         if(I->NState &&
-           ((SettingGet(I->Obj.G, cSetting_static_singletons) && (I->NState == 1))))
+           ((SettingGetGlobal_b(I->Obj.G, cSetting_static_singletons) && (I->NState == 1))))
           vs = I->State;
       }
     }
@@ -957,32 +969,26 @@ static void ObjectVolumeRender(ObjectVolume * I, RenderInfo * info)
             if(vs->RefreshFlag || vs->RecolorFlag || !pass) {
               int use_dlst;
 
-PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
-  "ObjectVolumeRender-Msg: !pass=%d and refresh=%d and recolor=%d.\n", 
-  !pass, vs->RefreshFlag, vs->RecolorFlag
-	ENDFB(I->Obj.G); 
-		
               if(!info->line_lighting)
                 glDisable(GL_LIGHTING);
-
               SceneResetNormal(I->Obj.G, false);
               /*ObjectUseColor(&I->Obj);*/
 
               // Never use display lists for volume rendering
               use_dlst = 0; 
 
+#ifdef _PYMOL_GL_CALLLISTS
               if(use_dlst && vs->displayList && vs->displayListInvalid) {
                 glDeleteLists(vs->displayList, 1);
                 vs->displayList = 0;
                 vs->displayListInvalid = false;
               }
-
+#endif
               if (!vs->textures[0] || vs->RefreshFlag) {
-                int i;
 
-PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
-  "ObjectVolumeRender-Msg: texture not inited or we need refresh.\n"
-  ENDFB(I->Obj.G); 
+		PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
+		  "ObjectVolumeRender-Msg: texture not inited or we need refresh.\n"
+		  ENDFB(I->Obj.G); 
 
                 vs->RefreshFlag = false;
 
@@ -1008,35 +1014,16 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
 		  printf("glTexImage3D is: %x", glTexImage3D);
 #endif
 /* END PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
-  
-PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
-  "ObjectVolumeRender-Msg: About to create the texture-unit.\n"
-  ENDFB(I->Obj.G); 
-/*
-                // For future experiments with tex coord jittering
+		PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
+		  "ObjectVolumeRender-Msg: About to create the texture-unit.\n"
+		  ENDFB(I->Obj.G); 
 
-                if (vs->textures[2]) {
-                  glDeleteTextures(1, &vs->textures[2]);
-                  vs->textures[2] = 0;
-                }
-                unsigned char random_data[3*1024];
-                for (i=0;i<3*1024;i++) {
-                    random_data[i] = (rand() % 255);
-                }
-                glGenTextures(1, &vs->textures[2]);
-                glBindTexture(GL_TEXTURE_2D, vs->textures[2]);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-                glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 32, 32, 0, GL_RGB, GL_UNSIGNED_BYTE, random_data);
-*/
                 if (vs->textures[0]) {
-                  glDeleteTextures(1, &vs->textures[0]);
+                  glDeleteTextures(1, (const GLuint *) &vs->textures[0]);
                   vs->textures[0] = 0;
                 }
                 // Create a 3D texture
-                glGenTextures(1, &vs->textures[0]);
+                glGenTextures(1, (GLuint *) &vs->textures[0]);
                 glBindTexture(GL_TEXTURE_3D, vs->textures[0]);
                 glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1056,27 +1043,27 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
                   GL_RED, GL_FLOAT, vs->volume->data);
                 glPixelTransferf(GL_RED_BIAS, 0.0);
                 glPixelTransferf(GL_RED_SCALE, 1.0);
-PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
-  "ObjectVolumeRender-Msg: Created.\n"
-  ENDFB(I->Obj.G); 
+		PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
+		  "ObjectVolumeRender-Msg: Created.\n"
+		  ENDFB(I->Obj.G); 
                 // Create a color map - this will be replaced by a proper Volume Ramp object
                 if (vs->textures[1]) {
-                  glDeleteTextures(1, &vs->textures[1]);
+                  glDeleteTextures(1, (const GLuint *) &vs->textures[1]);
                   vs->textures[1] = 0;
                 }
               }
 
           		if (vs->RecolorFlag || 0==I->Obj.Color) {
           		  int i;
-PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
-  "ObjectVolumeColor-Update: Making new color ramp.\n"
-  ENDFB(I->Obj.G);
+			  PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
+			    "ObjectVolumeColor-Update: Making new color ramp.\n"
+			    ENDFB(I->Obj.G);
           		  /* default coloring */
           		  vs->RecolorFlag = false;
           		  if (0==I->Obj.Color) {
-PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
-  "ObjectVolumeColor-Update: No colors, making new.\n"
-  ENDFB(I->Obj.G);
+			    PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
+			      "ObjectVolumeColor-Update: No colors, making new.\n"
+			      ENDFB(I->Obj.G);
 		    
                   /* don't need to create more space, just overwrite the values */
             		  if (vs->colors) free(vs->colors);
@@ -1092,11 +1079,11 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
           		      vs->colors[4*i+3] = 0.1*exp(-(norm+0.5)*(norm+0.5)) + 0.5*(exp(-(norm-1.1)*(norm-1.1)/0.4));
 		              }
 		            } else {
-PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
-  "ObjectVolumeColor-Update: Using established color ramp.\n"
-  ENDFB(I->Obj.G);  
+			    PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
+			      "ObjectVolumeColor-Update: Using established color ramp.\n"
+			      ENDFB(I->Obj.G);  
             		}
-                glGenTextures(1, &vs->textures[1]);
+                glGenTextures(1, (GLuint *) &vs->textures[1]);
                 glBindTexture(GL_TEXTURE_1D, vs->textures[1]);
                 glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1105,6 +1092,10 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
                 glTexImage1D(GL_TEXTURE_1D, 0, volume_bit_depth, volume_nColors, 0, GL_RGBA, GL_FLOAT, vs->colors);
               } // recolor
 
+#ifndef _PYMOL_GL_CALLLISTS
+	      if(use_dlst){
+	      } else {
+#else
               if(use_dlst && vs->displayList) {
                 glCallList(vs->displayList);
               } else {
@@ -1116,6 +1107,80 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
                     }
                   }
                 }
+#endif
+                  corner = vs->Corner;
+
+		  /* extents */
+		  if(I->Obj.RepVis[cRepExtent] && corner) {
+#ifdef _PYMOL_GL_DRAWARRAYS
+		    {
+		      const GLfloat polyVerts[] = {
+			corner[0], corner[1], corner[2],
+			corner[3], corner[4], corner[5],
+			corner[3], corner[4], corner[5],
+			corner[9], corner[10], corner[11],
+			corner[9], corner[10], corner[11],
+			corner[6], corner[7], corner[8], 
+			corner[6], corner[7], corner[8],
+			corner[0], corner[1], corner[2], 
+			
+			corner[12], corner[13], corner[14],
+			corner[15], corner[16], corner[17],
+			corner[15], corner[16], corner[17],
+			corner[21], corner[22], corner[23],
+			corner[21], corner[22], corner[23],
+			corner[18], corner[19], corner[20],
+			corner[18], corner[19], corner[20], 
+			corner[12], corner[13], corner[14], 
+			
+			corner[0], corner[1], corner[2],
+			corner[12], corner[13], corner[14],
+			corner[3], corner[4], corner[5],
+			corner[15], corner[16], corner[17],
+			corner[9], corner[10], corner[11],
+			corner[21], corner[22], corner[23],
+			corner[6], corner[7], corner[8], 
+			corner[18], corner[19], corner[20]
+		      };
+		      glColor3f(1,1,1);
+		      glEnableClientState(GL_VERTEX_ARRAY);
+		      glVertexPointer(3, GL_FLOAT, 0, polyVerts);
+		      glDrawArrays(GL_LINES, 0, 24);
+		      glDisableClientState(GL_VERTEX_ARRAY);
+		    }
+#else
+		    glBegin(GL_LINES);
+		    glColor3f(1,1,1);
+		    glVertex3f(corner[0], corner[1], corner[2]);
+		    glVertex3f(corner[3], corner[4], corner[5]);
+		    glVertex3f(corner[3], corner[4], corner[5]);
+		    glVertex3f(corner[9], corner[10], corner[11]);
+		    glVertex3f(corner[9], corner[10], corner[11]);
+		    glVertex3f(corner[6], corner[7], corner[8]); 
+		    glVertex3f(corner[6], corner[7], corner[8]);
+		    glVertex3f(corner[0], corner[1], corner[2]); 
+
+		    glVertex3f(corner[12], corner[13], corner[14]);
+		    glVertex3f(corner[15], corner[16], corner[17]);
+		    glVertex3f(corner[15], corner[16], corner[17]);
+		    glVertex3f(corner[21], corner[22], corner[23]);
+		    glVertex3f(corner[21], corner[22], corner[23]);
+		    glVertex3f(corner[18], corner[19], corner[20]);
+		    glVertex3f(corner[18], corner[19], corner[20]); 
+		    glVertex3f(corner[12], corner[13], corner[14]); 
+
+		    glVertex3f(corner[0], corner[1], corner[2]);
+		    glVertex3f(corner[12], corner[13], corner[14]);
+		    glVertex3f(corner[3], corner[4], corner[5]);
+		    glVertex3f(corner[15], corner[16], corner[17]);
+		    glVertex3f(corner[9], corner[10], corner[11]);
+		    glVertex3f(corner[21], corner[22], corner[23]);
+		    glVertex3f(corner[6], corner[7], corner[8]); 
+		    glVertex3f(corner[18], corner[19], corner[20]);
+		    glEnd();
+#endif
+		  }
+
                 if(n && v && I->Obj.RepVis[cRepVolume]) {
                   x_offset = 0.5 / vs->volume->dim[2];
                   y_offset = 0.5 / vs->volume->dim[1];
@@ -1146,10 +1211,7 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
                   tex_corner[22] = 1.0-y_offset;
                   tex_corner[23] = 1.0-z_offset;
 
-                  p = CShaderMgr_GetShaderPrg(G->ShaderMgr, "volume");
-
-                  corner = vs->Corner;
-
+                  shaderPrg = CShaderMgr_GetShaderPrg(G->ShaderMgr, "volume");
                   origin[0] = corner[0] + 0.5*(corner[21]-corner[0]);
 		  origin[1] = corner[1] + 0.5*(corner[22]-corner[1]);
 		  origin[2] = corner[2] + 0.5*(corner[23]-corner[2]);
@@ -1164,39 +1226,6 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
                     max_ext = vs->ExtentMax;
                   }
                   glDisable(GL_LIGHTING);
-		  /* extents */
-		  if(I->Obj.RepVis[cRepExtent] && corner) {
-		    glBegin(GL_LINES);
-		    glColor3f(1,1,1);
-		    glVertex3f(corner[0], corner[1], corner[2]);
-		    glVertex3f(corner[3], corner[4], corner[5]);
-		    glVertex3f(corner[3], corner[4], corner[5]);
-		    glVertex3f(corner[9], corner[10], corner[11]);
-		    glVertex3f(corner[9], corner[10], corner[11]);
-		    glVertex3f(corner[6], corner[7], corner[8]); 
-		    glVertex3f(corner[6], corner[7], corner[8]);
-		    glVertex3f(corner[0], corner[1], corner[2]); 
-
-		    glVertex3f(corner[12], corner[13], corner[14]);
-		    glVertex3f(corner[15], corner[16], corner[17]);
-		    glVertex3f(corner[15], corner[16], corner[17]);
-		    glVertex3f(corner[21], corner[22], corner[23]);
-		    glVertex3f(corner[21], corner[22], corner[23]);
-		    glVertex3f(corner[18], corner[19], corner[20]);
-		    glVertex3f(corner[18], corner[19], corner[20]); 
-		    glVertex3f(corner[12], corner[13], corner[14]); 
-
-		    glVertex3f(corner[0], corner[1], corner[2]);
-		    glVertex3f(corner[12], corner[13], corner[14]);
-		    glVertex3f(corner[3], corner[4], corner[5]);
-		    glVertex3f(corner[15], corner[16], corner[17]);
-		    glVertex3f(corner[9], corner[10], corner[11]);
-		    glVertex3f(corner[21], corner[22], corner[23]);
-		    glVertex3f(corner[6], corner[7], corner[8]); 
-		    glVertex3f(corner[18], corner[19], corner[20]);
-		    glEnd();
-		  }
-
                   m = SceneGetMatrix(G);
                   zaxis[0] = m[2];
 		  zaxis[1] = m[6];
@@ -1239,19 +1268,34 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
 /* glVertex3f(origin[0]+sliceRange,origin[1]-sliceRange,origin[2]+sliceRange); */
 /* glEnd(); */
 /* // */
+                CShaderPrg_Enable(shaderPrg);
+                CShaderPrg_Set1i(shaderPrg, "volumeTex", 0);
+                CShaderPrg_Set1i(shaderPrg, "colorTex", 1);
+              	CShaderPrg_Set1f(shaderPrg, "nSlices", volume_layers);
 
-                CShaderPrg_Enable(p);
-                CShaderPrg_Set1i(p, "volumeTex", 0);
-                CShaderPrg_Set1i(p, "colorTex", 1);
-            	CShaderPrg_Set1f(p, "nSlices", volume_layers);
-
-                glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D, vs->textures[2]);
+		{
+		  int bg_gradient = SettingGet_b(G, NULL, NULL, cSetting_bg_gradient);
+		  OrthoLineType bg_image_filename;
+		  strcpy(bg_image_filename,SettingGet_s(G, NULL, NULL, cSetting_bg_image_filename));
+		  CShaderPrg_Set1f(shaderPrg, "fogIsSolidColor", bg_gradient || bg_image_filename[0] ? 0.f : 1.f);
+		}
+		CShaderPrg_Set3fv(shaderPrg, "fogSolidColor", ColorGet(G, SettingGet_color(G, NULL, NULL, cSetting_bg_rgb)));
+		CShaderPrg_SetFogUniforms(G, shaderPrg);
+		CShaderPrg_Set1f(shaderPrg, "fog_enabled", SettingGetGlobal_b(G, cSetting_depth_cue) ? 1.f : 0.f);
+		glActiveTexture(GL_TEXTURE4);
+		glBindTexture(GL_TEXTURE_2D, OrthoGetBackgroundTextureID(G));
+		if (!(shaderPrg->uniform_set & 4)){
+		  CShaderPrg_Set1i(shaderPrg, "bgTextureMap", 4);
+		  shaderPrg->uniform_set |= 4;
+		}
+		{
+		  float fog[4];
+		  SceneSetFog(G, fog);
+		}
                 glActiveTexture(GL_TEXTURE1);
                 glBindTexture(GL_TEXTURE_1D, vs->textures[1]);
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_3D, vs->textures[0]);
-
                 // PyMOL uses different glAlphaFunct and we need to reset it
                 // to default value (everything passes)
 
@@ -1294,14 +1338,16 @@ PRINTFB(I->Obj.G, FB_ObjectVolume, FB_Blather)
                       &tex_corner[6], &tex_corner[18], &tex_coords[n_points], origin);
                     ObjectVolumeDrawSlice(points, tex_coords, n_points/3, zaxis);
                   }
-                  CShaderPrg_Disable(p);
+                  CShaderPrg_Disable(shaderPrg);
+
                   glAlphaFunc(alpha_func, alpha_ref);
                   glEnable(GL_LIGHTING);
                 }
+#ifdef _PYMOL_GL_CALLLISTS
                 if(use_dlst && vs->displayList) {
                   glEndList();
                 }
-
+#endif
               }
               glEnable(GL_LIGHTING);
             }
@@ -1368,13 +1414,37 @@ void ObjectVolumeDrawSlice(float *points, float *tex_coords, int n_points, float
     }
 
     // Now the vertices are sorted so draw the polygon
+#ifdef _PYMOL_GL_DRAWARRAYS
+    {
+      int nverts = n_points, pl = 0;
+      ALLOCATE_ARRAY(GLfloat,vertVals,nverts*3)
+      ALLOCATE_ARRAY(GLfloat,texVals,nverts*3)
+      float *tmp_ptr;
+      for (i=0; i<n_points; i++) {
+	tmp_ptr = &tex_coords[3*vertices[(i)%n_points]];
+	texVals[pl] = tmp_ptr[0]; texVals[pl+1] = tmp_ptr[1]; texVals[pl+2] = tmp_ptr[2];	
+	tmp_ptr = &points[3*vertices[(i)%n_points]];
+	vertVals[pl] = tmp_ptr[0]; vertVals[pl+1] = tmp_ptr[1]; vertVals[pl+2] = tmp_ptr[2];	
+	pl += 3;
+      }
+      glEnableClientState(GL_VERTEX_ARRAY);
+      glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+      glVertexPointer(3, GL_FLOAT, 0, vertVals);
+      glTexCoordPointer(3, GL_FLOAT, 0, texVals);
+      glDrawArrays(GL_TRIANGLE_FAN, 0, nverts);
+      glDisableClientState(GL_VERTEX_ARRAY);
+      glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+      DEALLOCATE_ARRAY(vertVals)
+      DEALLOCATE_ARRAY(texVals)
+    }
+#else
     glBegin(GL_POLYGON);
     for (i=0; i<n_points; i++) {
       glTexCoord3fv(&tex_coords[3*vertices[(i)%n_points]]);
       glVertex3fv(&points[3*vertices[(i)%n_points]]);
     }
     glEnd();
-   
+#endif
 }
 
 int ObjectVolumeAddSlicePoint(float *pt0, float *pt1, float *zaxis, float d, 
@@ -1478,7 +1548,7 @@ void ObjectVolumeStateInit(PyMOLGlobals * G, ObjectVolumeState * vs)
   vs->isUpdated = false;
   // Initial ramp
   vs->RampSize = 5;
-  vs->Ramp = (float*)malloc(5*5*sizeof(float));
+  vs->Ramp = Alloc(float, 5*5);
   vs->Ramp[0] = 0.0; vs->Ramp[1] = 0.0; vs->Ramp[2] = 0.0; vs->Ramp[3] = 1.0; vs->Ramp[4] = 0.0;
   vs->Ramp[5] = 200.0; vs->Ramp[6] = 0.0; vs->Ramp[7] = 0.0; vs->Ramp[8] = 1.0; vs->Ramp[9] = 0.0;
   vs->Ramp[10] = 210.0; vs->Ramp[11] = 1.0; vs->Ramp[12] = 0.0; vs->Ramp[13] = 0.2; vs->Ramp[14] = 0.2;
@@ -1560,19 +1630,19 @@ ObjectVolume *ObjectVolumeFromXtalSym(PyMOLGlobals * G, ObjectVolume * obj, Obje
         int eff_range[6];
 
         if(IsosurfGetRange
-           (G, oms->Field, oms->Crystal, min_ext, max_ext, eff_range, false)) {
+           (G, oms->Field, oms->Symmetry->Crystal, min_ext, max_ext, eff_range, false)) {
           int fdim[3];
           int expand_result;
           /* need to generate symmetry-expanded temporary map */
 
-          vs->Crystal = *(oms->Crystal);
+          vs->Crystal = *(oms->Symmetry->Crystal);
           fdim[0] = eff_range[3] - eff_range[0];
           fdim[1] = eff_range[4] - eff_range[1];
           fdim[2] = eff_range[5] - eff_range[2];
           vs->Field = IsosurfFieldAlloc(I->Obj.G, fdim);
 
           expand_result =
-            IsosurfExpand(oms->Field, vs->Field, oms->Crystal, sym, eff_range);
+            IsosurfExpand(oms->Field, vs->Field, oms->Symmetry->Crystal, sym, eff_range);
 
           if(expand_result == 0) {
             ok = false;
@@ -1694,7 +1764,7 @@ ObjectVolume *ObjectVolumeFromBox(PyMOLGlobals * G, ObjectVolume * obj, ObjectMa
         max_ext = vs->ExtentMax;
       }
 
-      IsosurfGetRange(G, oms->Field, oms->Crystal, min_ext, max_ext, vs->Range, true);
+      IsosurfGetRange(G, oms->Field, oms->Symmetry->Crystal, min_ext, max_ext, vs->Range, true);
     }
     vs->ExtentFlag = true;
   }
@@ -1705,6 +1775,9 @@ ObjectVolume *ObjectVolumeFromBox(PyMOLGlobals * G, ObjectVolume * obj, ObjectMa
   }
   if(I) {
     ObjectVolumeRecomputeExtent(I);
+    if (I->NState && I->State && !I->State->colors){
+      ObjectVolumeRampToColor(I, -1);
+    }
   }
   I->Obj.ExtentFlag = true;
   /*  printf("Brick %d %d %d %d %d %d\n",I->Range[0],I->Range[1],I->Range[2],I->Range[3],I->Range[4],I->Range[5]); */
@@ -1762,7 +1835,7 @@ PyObject * ObjectVolumeGetField(ObjectVolume * I)
   /* TODO: Allow for multi-state maps? */
   CField* F;
   int n_elem;
-  PyObject * result;
+  PyObject * result = NULL;
   ObjectVolumeState *ovs;
   int a;
 
@@ -1796,7 +1869,7 @@ PyObject * ObjectVolumeGetHistogram(ObjectVolume * I)
 #else
   /* TODO: Allow for multi-state maps? */
   int n_elem;
-  PyObject * result;
+  PyObject * result = NULL;
   ObjectVolumeState *ovs;
   int a;
 
@@ -1828,7 +1901,7 @@ PyObject * ObjectVolumeGetRamp(ObjectVolume * I)
 #else
   /* TODO: Allow for multi-state maps? */
   int n_elem;
-  PyObject * result;
+  PyObject * result = NULL;
   ObjectVolumeState *ovs;
   int a;
 
@@ -1859,8 +1932,7 @@ PyObject * ObjectVolumeSetRamp(ObjectVolume * I, float *ramp_list, int list_size
   return NULL;
 #else
   /* TODO: Allow for multi-state maps? */
-  int n_elem;
-  PyObject * result;
+  PyObject * result = NULL;
   ObjectVolumeState *ovs;
   int a;
 
@@ -1873,7 +1945,7 @@ PyObject * ObjectVolumeSetRamp(ObjectVolume * I, float *ramp_list, int list_size
       ovs = I->State + a;
       if (ramp_list && list_size>0) {
         if (ovs->Ramp) {
-          free(ovs->Ramp);
+          FreeP(ovs->Ramp);
         }
         ovs->Ramp = ramp_list;
         ovs->RampSize = list_size / 5;
@@ -1895,7 +1967,7 @@ PyObject * ObjectVolumeGetIsUpdated(ObjectVolume * I)
   return NULL;
 #else
   /* TODO: Allow for multi-state maps? */
-  PyObject * result;
+  PyObject * result = NULL;
   ObjectVolumeState *ovs;
   int a;
   

@@ -72,6 +72,8 @@ typedef struct {
 #define cPickableAtom -1
 #define cPickableLabel -2
 #define cPickableGadget -3
+#define cPickableNoPick -4
+
 
 #define cPuttyTransformNormalizedNonlinear 0
 #define cPuttyTransformRelativeNonlinear   1
@@ -102,13 +104,13 @@ typedef struct {
   Picking *picked;
 } Multipick;
 
-typedef struct {
+typedef struct LabPosType {
   int mode;
   float pos[3];
   float offset[3];
 } LabPosType;
 
-typedef struct {
+typedef struct RefPosType {
   float coord[3];
   int specified;
 } RefPosType;

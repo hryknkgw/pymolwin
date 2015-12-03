@@ -32,7 +32,7 @@ typedef struct CoordSet {
   void (*fFree) (struct CoordSet * I);
   void (*fEnumIndices) (struct CoordSet * I);
   void (*fAppendIndices) (struct CoordSet * I, int existingAtoms);
-  void (*fExtendIndices) (struct CoordSet * I, int nAtom);
+  int (*fExtendIndices) (struct CoordSet * I, int nAtom);
   void (*fInvalidateRep) (struct CoordSet * I, int type, int level);
   CObjectState State;
   ObjectMolecule *Obj;
@@ -40,7 +40,7 @@ typedef struct CoordSet {
   int *Color;
   int *IdxToAtm;
   int *AtmToIdx;
-  int NIndex, NAtIndex;
+  int NIndex, NAtIndex, prevNIndex, prevNAtIndex;
   Rep *Rep[cRepCnt];            /* an array of pointers to representations */
   int Active[cRepCnt];          /* active flags */
   int NTmpBond;                 /* optional, temporary (for coord set transfers) */
@@ -76,7 +76,7 @@ typedef struct CoordSet {
      byres/bychain actions which assume such atoms to be adjancent...
    */
 
-  CGO *SculptCGO;
+  CGO *SculptCGO, *SculptShaderCGO;
   MapType *Coord2Idx;
   float Coord2IdxReq, Coord2IdxDiv;
 
@@ -100,7 +100,7 @@ int CoordSetFromPyList(PyMOLGlobals * G, PyObject * list, CoordSet ** cs);
 
 CoordSet *CoordSetNew(PyMOLGlobals * G);
 void CoordSetAtomToPDBStrVLA(PyMOLGlobals * G, char **charVLA, int *c, AtomInfoType * ai,
-                             float *v, int cnt, PDBInfoRec * pdb_info);
+                             float *v, int cnt, PDBInfoRec * pdb_info, double *matrix);
 void CoordSetAtomToTERStrVLA(PyMOLGlobals * G, char **charVLA, int *c, AtomInfoType * ai,
                              int cnt);
 CoordSet *CoordSetCopy(CoordSet * cs);
@@ -111,7 +111,7 @@ void CoordSetRealToFrac(CoordSet * I, CCrystal * cryst);
 void CoordSetFracToReal(CoordSet * I, CCrystal * cryst);
 void CoordSetGetAverage(CoordSet * I, float *v0);
 PyObject *CoordSetAtomToChemPyAtom(PyMOLGlobals * G, AtomInfoType * ai, float *v,
-                                   float *ref, int index);
+                                   float *ref, int index, double *matrix);
 int CoordSetGetAtomVertex(CoordSet * I, int at, float *v);
 int CoordSetGetAtomTxfVertex(CoordSet * I, int at, float *v);
 int CoordSetSetAtomVertex(CoordSet * I, int at, float *v);
@@ -125,12 +125,16 @@ int CoordSetValidateRefPos(CoordSet * I);
 
 void CoordSetPurge(CoordSet * I);
 void CoordSetAdjustAtmIdx(CoordSet * I, int *lookup, int nAtom);
-void CoordSetMerge(CoordSet * I, CoordSet * cs);        /* must be non-overlapping */
+int CoordSetMerge(ObjectMolecule *OM, CoordSet * I, CoordSet * cs);        /* must be non-overlapping */
 void CoordSetRecordTxfApplied(CoordSet * I, float *TTT, int homogenous);
 void CoordSetUpdateCoord2IdxMap(CoordSet * I, float cutoff);
 
 typedef struct _CCoordSetUpdateThreadInfo CCoordSetUpdateThreadInfo;
 
 void CoordSetUpdateThread(CCoordSetUpdateThreadInfo * T);
+
+void LabPosTypeCopy(LabPosType * src, LabPosType * dst);
+void RefPosTypeCopy(RefPosType * src, RefPosType * dst);
+void CoordSetFree(CoordSet * I);
 
 #endif

@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -77,7 +78,17 @@ static void ObjectCallbackRender(ObjectCallback * I, RenderInfo * info)
 
   PyObject *pobj = NULL;
 
-  if(!pass) {
+  if(pass>0) { /* for now, the callback should be called during the first pass (opaque), so 
+		  that it is possible to set positions for any object that is rendered in the 
+		  opaque pass.  This is still a kludge, since the callback should probably 
+		  happen in a pass before this (should we add a new pass 2?  this will probably
+		  need changes all over.. and will introduce some minimal overhead (another pass
+		  on the objects).  For now, these callbacks need to be in the object list before
+		  any objects it tries to set (this came up on the crosshair.py screen stabilized example)
+		  We also might want to have arguments on the callback for whether it gets called
+		  at the beginning (pre-first pass) or end (post-last pass).
+	       */
+    //  if(!pass) {
 
     ObjectPrepareContext(&I->Obj, ray);
     if(I->Obj.RepVis[cRepCallback]) {
@@ -95,7 +106,9 @@ static void ObjectCallbackRender(ObjectCallback * I, RenderInfo * info)
               if(pick) {
               } else {
                 if(PyObject_HasAttrString(pobj, "__call__")) {
-                  Py_XDECREF(PyObject_CallMethod(pobj, "__call__", ""));
+		  PyObject *ret ;
+                  ret = PyObject_CallMethod(pobj, "__call__", "");
+		  Py_XDECREF(ret);
                 }
                 if(PyErr_Occurred())
                   PyErr_Print();
@@ -106,7 +119,7 @@ static void ObjectCallbackRender(ObjectCallback * I, RenderInfo * info)
         }
       } else {
         if(!sobj) {
-          if(I->NState && SettingGet(G, cSetting_static_singletons))
+          if(I->NState && SettingGetGlobal_b(G, cSetting_static_singletons))
             sobj = I->State;
         }
         if(ray) {
@@ -117,7 +130,9 @@ static void ObjectCallbackRender(ObjectCallback * I, RenderInfo * info)
               pobj = sobj->PObj;
               PBlock(G);
               if(PyObject_HasAttrString(pobj, "__call__")) {
-                Py_XDECREF(PyObject_CallMethod(pobj, "__call__", ""));
+		PyObject *ret ;
+                ret = PyObject_CallMethod(pobj, "__call__", "");
+		Py_XDECREF(ret);
               }
               if(PyErr_Occurred())
                 PyErr_Print();

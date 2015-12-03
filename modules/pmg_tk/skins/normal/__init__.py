@@ -61,8 +61,8 @@ class Normal(PMGSkin):
     pad = ' ' # extra space in menus
     
     appname        = 'The PyMOL Molecular Graphics System'
-    appversion     = '1.4'
-    copyright      = ('Copyright (C) 2003-2011 \n' +
+    appversion     = '0.0.0.0' # will be set in __init__
+    copyright      = ('Copyright (C) 2003-2012 \n' +
                       'Schrodinger LLC.\n'+
                       'All rights reserved.')
     contactweb     = 'http://www.pymol.org'
@@ -141,8 +141,6 @@ class Normal(PMGSkin):
     def destroyMessageBar(self):
 
         self.messageBar.destroy()
-#        self.app.destroycomponent('messagebar')
-#        self.app.destroycomponent('bottomtray')
         
     def get_current_session_file(self):
         session_file = self.cmd.get_setting_text("session_file")        
@@ -180,6 +178,7 @@ class Normal(PMGSkin):
                       text=text,highlightthickness=0,
                       command=cmmd,padx=0,pady=0)
         newBtn.pack(side=LEFT,fill=BOTH,expand=YES)
+        return newBtn
 
     def get_view(self):
         self.cmd.get_view(quiet=0)
@@ -240,8 +239,9 @@ class Normal(PMGSkin):
         self.volB = self.buttonAdd(row4, 'Volume',
                                    lambda s=self:
                                        s.toggleFrame(s.volFrame))
-#        btn_interrupt = self.buttonAdd(self.commandFrame,'Interrupt',lambda s=self: s.cmd.interrupt())
-        
+        # initialize disabled
+        self.volB.config(state=DISABLED)
+
     def destroyButtonArea(self):
         self.app.destroycomponent('row1')
         self.app.destroycomponent('row2')
@@ -301,6 +301,17 @@ class Normal(PMGSkin):
         else: # autocenter, deiconify, and run mainloop
             win.destroy()
 
+    def back_search(self, set0=False):
+        if not self.history_cur or set0:
+            self.history[0] = self.command.get()
+        for i in range(self.history_cur + 1, len(self.history)):
+            if self.history[i].startswith(self.history[0]):
+                self.history_cur = i
+                self.command.set(self.history[self.history_cur])
+                l = len(self.history[self.history_cur])
+                self.entry.icursor(l)
+                break
+
     def back(self):
         if not self.history_cur:
             self.history[0] = self.command.get()
@@ -312,7 +323,7 @@ class Normal(PMGSkin):
     def forward(self):
         if not self.history_cur:
             self.history[0] = self.command.get()
-        self.history_cur = (self.history_cur - 1) & self.history_mask
+        self.history_cur = max(0, self.history_cur - 1) & self.history_mask
         self.command.set(self.history[self.history_cur])
         l = len(self.history[self.history_cur])
         self.entry.icursor(l)
@@ -323,9 +334,10 @@ class Normal(PMGSkin):
         t.start()
         
     def doTypedCommand(self,cmmd):
-        self.history[0]=cmmd
-        self.history.insert(0,'') # always leave blank at 0
-        self.history.pop(self.history_mask+1)
+        if self.history[1] != cmmd:
+            self.history[0]=cmmd
+            self.history.insert(0,'') # always leave blank at 0
+            self.history.pop(self.history_mask+1)
         self.history_cur = 0
         t = threading.Thread(target=_doAsync,args=(self.cmd,cmmd,1))
         t.setDaemon(1)
@@ -363,6 +375,7 @@ class Normal(PMGSkin):
         self.entry.bind('<Tab>', lambda e, s=self: s.complete(e))
         self.entry.bind('<Up>', lambda e, s=self: s.back())
         self.entry.bind('<Down>', lambda e, s=self: s.forward())
+        self.entry.bind('<Control-Up>', lambda e: self.back_search())
         self.root.protocol("WM_DELETE_WINDOW", lambda s=self: s.confirm_quit())
         
         self.initialdir = os.getcwd()
@@ -552,14 +565,22 @@ class Normal(PMGSkin):
             self.output.after(500,self.update_menus) # twice a second
 
     def update_volume(self):
+        # if the volume frame is open, update it
         if self.volFrame in self.dataArea.slaves():
             if self.volFrame.update_is_needed():
                 self.volFrame.update_object_list()
                 self.volFrame.update_listbox()
-                self.volFrame.update_transferframe()                
+                self.volFrame.update_transferframe()
+        else:
+            # volume frame is closed, update the button
+            if len(self.cmd.get_names_of_type("object:volume",public=1))>0:
+                self.volB.config(state=NORMAL)
+            else:
+                self.volB.config(state=DISABLED)
+        # keep calling
         if self.app.allow_after:
             self.output.after(500,self.update_volume) 
-        
+
     def file_open(self,tutorial=0):
         # FIXME: finish
         REFLECTION_FORMATS = ( "MTZ", "mtz", "CIF", "cif" )
@@ -797,6 +818,12 @@ class Normal(PMGSkin):
                                          "cmd.save('%s','(%s)')\n"%(sfile,save_sele))
 			    if self.states_option.getvalue()=="all":
                                 self.cmd.save(sfile,"(%s)"%save_sele,state=0,quiet=0)
+                            elif self.states_option.getvalue() == "object's current":
+                                ap = 0
+                                for sel in sels:
+                                    s = int(self.cmd.get("state", str(sel)))
+                                    self.cmd.multisave(sfile,str(sel),state=s, quiet=0, append=ap)
+                                    ap = 1
 			    else:
                                 self.cmd.save(sfile,"(%s)"%save_sele,quiet=0)
                             return
@@ -851,32 +878,26 @@ class Normal(PMGSkin):
                             if doSplit:
                                 # save each state in "save_sele" to file "sfile" as 'sfile_stateXYZ.pdb'
                                 s = self.cmd.count_states(save_sele)
-#                                print "Nstates to save= %s" % s
                                 for stateSave in range(1,int(s)+1):
                                     save_file = sfile
                                     # _state004
                                     inter = "_state" + string.zfill(str(stateSave), len(str(s))+1)
-#                                    print "inter: ", inter
                                     # g either MATCHES *.pdb or not.  If so, save, name_stateXYZ.pdb
                                     g = re.search("(.*)(\..*)$", save_file)
                                     if g!=None:
                                         # 1PDB_state004.pdb
                                         save_file = g.groups()[0] + inter + g.groups()[1]
-#                                        print "g!=None: save_file=> %s" % save_file
                                     else:
                                         # user entered a file w/o an extension name: eg, '1abc'
                                         # this saves to, '1abc_state00XYZ'
                                         save_file = save_file + inter
-#                                        print "g==None: save_file=> %s" % save_file
-
-#                                    print "Saving to: %s in state %s" % (save_file, stateSave)
 
                                     self.cmd.log("save %s,(%s)\n"%(save_file,save_sele),
                                                  "cmd.save('%s','(%s)', state='%s')\n"%(save_file,save_sele,stateSave))
                                     self.cmd.save(save_file,"(%s)"%save_sele,state=stateSave,quiet=0)
                             else:
                                 save_file = sfile
-#                                print "Saving one state from one file."
+
                                 # just save current selection to one file
                                 self.cmd.log("save %s,(%s)\n"%(save_file,save_sele),
                                              "cmd.save('%s','(%s)', state='%s')\n"%(save_file,save_sele,stateSave))
@@ -1009,13 +1030,14 @@ class Normal(PMGSkin):
         if command != None:
             self.cmd.do(command)
 
-            
-    def aboutPlugins(self):
-        about = Pmw.MessageDialog((self.app._hull),
-                                          title = 'About Plugins',
-                                          message_text =
-     'Plugins are external modules which extend PyMOL\'s capabilities.\n\n Available plugins (if any) are shown in the Plugin menu.\n\nIf no plugins are listed, then either none have been installed, \nor those that are installed are not yet functional.')
-        about.activate(geometry='centerscreenfirst')      
+    def mvprg_scene_loop(self, pause, rock, angle):
+        def func():
+            cmd = self.cmd
+            start = cmd.get_movie_length() + 1
+            cmd.ending()
+            cmd.set('sweep_angle', angle)
+            cmd.movie.add_scenes(None, pause, rock=rock, start=start)
+        return func
 
     def transparency_menu(self,name,label,setting_name):
         
@@ -1273,8 +1295,8 @@ class Normal(PMGSkin):
 
         if _wincheck():
             self.menuBar.addmenuitem('File', 'command', 'Autoload MTZ file.',
-                                    label='Open MTZ with Defaults...',
-                                    command=self.file_autoload_mtz)
+                                     label='Open MTZ with Defaults...',
+                                     command=self.file_autoload_mtz)
 
         self.menuBar.addmenuitem('File', 'command', 'Save session.',
                                 label='Save Session',
@@ -1367,13 +1389,13 @@ class Normal(PMGSkin):
 #                         'Log Conformations.',
 #                         label='Log Conformations',
 #                        variable = self.setting.log_conformations,
-#                        command = lambda s=self: s.setting.update('log_conformations'))
+#                        )
 
 #      self.menuBar.addmenuitem('File', 'checkbutton',
 #                         'Log Box Selections.',
 #                         label='Log Box Selections',
 #                        variable = self.setting.log_box_selections,
-#                        command = lambda s=self: s.setting.update('log_box_selections'))
+#                        )
 
         self.menuBar.addmenu('Edit', 'Edit',tearoff=TRUE)
 
@@ -1387,12 +1409,12 @@ class Normal(PMGSkin):
                 self.menuBar.addmenuitem('Edit', 'separator', '')
         
 
-        self.menuBar.addmenuitem('Edit', 'command', 'Undo Conformation',
-                                         label='Undo Conformation [Ctrl-Z]',
+        self.menuBar.addmenuitem('Edit', 'command', 'Undo',
+                                         label='Undo [Ctrl-Z]',
                                          command = lambda s=self: s.cmd.do("_ undo"))
 
-        self.menuBar.addmenuitem('Edit', 'command', 'Redo Conformation',
-                                         label='Redo Conformation [Ctrl-A]',
+        self.menuBar.addmenuitem('Edit', 'command', 'Redo',
+                                         label='Redo [Ctrl-Y]',
                                          command = lambda s=self: s.cmd.do("_ redo"))
 
         self.menuBar.addmenuitem('Edit', 'separator', '')
@@ -1417,7 +1439,7 @@ class Normal(PMGSkin):
                                  'Auto-Copy Images',
                                  label='Auto-Copy Images',
                                  variable = self.setting.auto_copy_images,
-                                 command = lambda s=self: s.setting.update('auto_copy_images'))
+                                 )
 
         self.menuBar.addmenu('Build', 'Build',tearoff=TRUE)
 
@@ -1442,11 +1464,11 @@ class Normal(PMGSkin):
             "_ editor.attach_fragment('pk1','formamide',5,0)"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Bromine',
-                                         label='Bromine [Ctrl-B]',
+                                         label='Bromine [Ctrl-Shift-B]',
                                          command = lambda s=self: s.cmd.do("_ replace Br,1,1"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Carbon',
-                                         label='Carbon [Ctrl-C]',
+                                         label='Carbon [Ctrl-Shift-C]',
                                          command = lambda s=self: s.cmd.do("_ replace C,4,4"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Carbonyl',
@@ -1455,7 +1477,7 @@ class Normal(PMGSkin):
             "_ editor.attach_fragment('pk1','formaldehyde',2,0)"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Chlorine',
-                                         label='Chlorine [Ctrl-L]',
+                                         label='Chlorine [Ctrl-Shift-L]',
                                          command = lambda s=self: s.cmd.do("_ replace Cl,1,1"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Cyclobutyl',
@@ -1484,24 +1506,24 @@ class Normal(PMGSkin):
             "_ editor.attach_fragment('pk1','cycloheptane',8,0)"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Fluorine',
-                                         label='Fluorine [Ctrl-F]',
+                                         label='Fluorine [Ctrl-Shift-F]',
                                          command = lambda s=self: s.cmd.do("_ replace F,1,1"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Iodine',
-                                         label='Iodine [Ctrl-I]',
+                                         label='Iodine [Ctrl-Shift-I]',
                                          command = lambda s=self: s.cmd.do("_ replace I,1,1"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Methane',
-                                         label='Methane',
+                                         label='Methane [Ctrl-Shift-M]',
                                          command = lambda s=self: s.cmd.do(
             "_ editor.attach_fragment('pk1','methane',1,0)"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Nitrogen',
-                                         label='Nitrogen [Ctrl-N]',
+                                         label='Nitrogen [Ctrl-Shift-N]',
                                          command = lambda s=self: s.cmd.do("_ replace N,4,3"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Oxygen',
-                                         label='Oxygen [Ctrl-O]',
+                                         label='Oxygen [Ctrl-Shift-O]',
                                          command = lambda s=self: s.cmd.do("_ replace O,4,2"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Phenyl',
@@ -1510,7 +1532,7 @@ class Normal(PMGSkin):
             "_ editor.attach_fragment('pk1','benzene',6,0)"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Sulfer',
-                                         label='Sulfer [Ctrl-S]',
+                                         label='Sulfer [Ctrl-Shift-S]',
                                          command = lambda s=self: s.cmd.do("_ replace S,2,2"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Sulfonyl',
@@ -1519,7 +1541,7 @@ class Normal(PMGSkin):
             "_ editor.attach_fragment('pk1','sulfone',3,1)"))
 
         self.menuBar.addmenuitem('Fragment', 'command', 'Phosphorus',
-                                         label='Phosphorus [Ctrl-P]',
+                                         label='Phosphorus [Ctrl-Shift-P]',
                                          command = lambda s=self: s.cmd.do("_ replace P,4,3"))
 
 #      self.menuBar.addmenu('Residue', 'Residue')
@@ -1666,13 +1688,13 @@ class Normal(PMGSkin):
                                  'Auto-Sculpt.',
                                  label='Auto-Sculpting',
                                 variable = self.setting.auto_sculpt,
-                                command = lambda s=self: s.setting.update('auto_sculpt'))
+                                )
 
         self.menuBar.addmenuitem('Sculpting', 'checkbutton',
                                  'Sculpting.',
                                  label='Sculpting',
                                 variable = self.setting.sculpting,
-                                command = lambda s=self: s.setting.update('sculpting'))
+                                )
 
         self.menuBar.addmenuitem('Sculpting', 'separator', '')
         
@@ -1764,19 +1786,19 @@ class Normal(PMGSkin):
         self.menuBar.addmenuitem('Build', 'separator', '')
         
         self.menuBar.addmenuitem('Build', 'command', 'Cycle Bond Valence',
-                                         label='Cycle Bond Valence [Ctrl-W]',
+                                         label='Cycle Bond Valence [Ctrl-Shift-W]',
                                          command = lambda s=self: s.cmd.do("_ cycle_valence"))
 
         self.menuBar.addmenuitem('Build', 'command', 'Fill Hydrogens',
-                                         label='Fill Hydrogens on (pk1) [Ctrl-R]',
+                                         label='Fill Hydrogens on (pk1) [Ctrl-Shift-R]',
                                          command = lambda s=self: s.cmd.do("_ h_fill"))
 
         self.menuBar.addmenuitem('Build', 'command', 'Invert',
-                                         label='Invert (pk2)-(pk1)-(pk3) [Ctrl-E]',
+                                         label='Invert (pk2)-(pk1)-(pk3) [Ctrl-Shift-E]',
                                          command = lambda s=self: s.cmd.do("_ invert"))
 
         self.menuBar.addmenuitem('Build', 'command', 'Form Bond',
-                                         label='Create Bond (pk1)-(pk2) [Ctrl-T]',
+                                         label='Create Bond (pk1)-(pk2) [Ctrl-Shift-T]',
                                          command = lambda s=self: s.cmd.do("_ bond"))
 
 
@@ -1784,21 +1806,21 @@ class Normal(PMGSkin):
 
         
         self.menuBar.addmenuitem('Build', 'command', 'Remove (pk1)',
-                                         label='Remove (pk1) [Ctrl-D]',
+                                         label='Remove (pk1) [Ctrl-Shift-D]',
                                          command = lambda s=self: s.cmd.do("_ remove pk1"))
 
         self.menuBar.addmenuitem('Build', 'separator', '')
         
         self.menuBar.addmenuitem('Build', 'command', 'Make Positive',
-                                 label='Make (pk1) Positive [Ctrl-K]',
+                                 label='Make (pk1) Positive [Ctrl-Shift-K]',
                                  command = lambda s=self: s.cmd.do("_ alter pk1,formal_charge=1.0"))
         
         self.menuBar.addmenuitem('Build', 'command', 'Make Negative',
-                                 label='Make (pk1) Negative [Ctrl-J]',
+                                 label='Make (pk1) Negative [Ctrl-Shift-J]',
                                  command = lambda s=self: s.cmd.do("_ alter pk1,formal_charge=-1.0"))
         
         self.menuBar.addmenuitem('Build', 'command', 'Make Neutral',
-                                 label='Make (pk1) Neutral [Ctrl-U]',
+                                 label='Make (pk1) Neutral [Ctrl-Shift-U]',
                                  command = lambda s=self: s.cmd.do("_ alter pk1,formal_charge=-0.0"))
 
         self.menuBar.addmenu('Movie', 'Movie Control',tearoff=TRUE)
@@ -2051,68 +2073,17 @@ class Normal(PMGSkin):
         self.menuBar.addcascademenu('Program', 'Scene Loop', 'Scene Loop',
                                     label='Scene Loop')
 
-        self.menuBar.addcascademenu('Scene Loop', 'Nutate2', 'Nutate',
-                                    label='Nutate')
+        for label, rock in [('Nutate', 4), ('X-Rock', 2), ('Y-Rock', 1)]:
+            mlabel = 'SL-' + label
+            self.menuBar.addcascademenu('Scene Loop', mlabel, label, label=label)
 
-        self.menuBar.addmenuitem('Nutate2', 'command', '2 seconds each',label='2 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,2.0,rock=4,start=%d)"))
-
-        self.menuBar.addmenuitem('Nutate2', 'command', '4 seconds each',label='4 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,4.0,rock=4,start=%d)"))
-
-        self.menuBar.addmenuitem('Nutate2', 'command', '8 seconds each',label='8 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,8.0,rock=4,start=%d)"))
-
-        self.menuBar.addmenuitem('Nutate2', 'command', '12 seconds each',label='12 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,12.0,rock=4,start=%d)"))
-
-        self.menuBar.addmenuitem('Nutate2', 'command', '16 seconds each',label='16 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,16.0,rock=4,start=%d)"))
-
-        self.menuBar.addmenuitem('Nutate2', 'command', '24 seconds each',label='24 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,24.0,rock=4,start=%d)"))
-
-        self.menuBar.addcascademenu('Scene Loop', 'X-Rock2', 'X-Rock',
-                                    label='X-Rock')
-
-        self.menuBar.addmenuitem('X-Rock2', 'command', '2 seconds each',label='2 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,2.0,rock=2,start=%d)"))
-
-        self.menuBar.addmenuitem('X-Rock2', 'command', '4 seconds each',label='4 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,4.0,rock=2,start=%d)"))
-
-        self.menuBar.addmenuitem('X-Rock2', 'command', '8 seconds each',label='8 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,8.0,rock=2,start=%d)"))
-
-        self.menuBar.addmenuitem('X-Rock2', 'command', '12 seconds each',label='12 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,12.0,rock=2,start=%d)"))
-
-        self.menuBar.addmenuitem('X-Rock2', 'command', '16 seconds each',label='16 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,16.0,rock=2,start=%d)"))
-
-        self.menuBar.addmenuitem('X-Rock2', 'command', '24 seconds each',label='24 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,24.0,rock=2,start=%d)"))
-
-        self.menuBar.addcascademenu('Scene Loop', 'Y-Rock2', 'Y-Rock',
-                                    label='Y-Rock')
-
-        self.menuBar.addmenuitem('Y-Rock2', 'command', '2 seconds each',label='2 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,2.0,rock=1,start=%d)"))
-
-        self.menuBar.addmenuitem('Y-Rock2', 'command', '4 seconds each',label='4 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,4.0,rock=1,start=%d)"))
-
-        self.menuBar.addmenuitem('Y-Rock2', 'command', '8 seconds each',label='8 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,8.0,rock=1,start=%d)"))
-
-        self.menuBar.addmenuitem('Y-Rock2', 'command', '12 seconds each',label='12 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,12.0,rock=1,start=%d)"))
-
-        self.menuBar.addmenuitem('Y-Rock2', 'command', '16 seconds each',label='16 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,16.0,rock=1,start=%d)"))
-
-        self.menuBar.addmenuitem('Y-Rock2', 'command', '24 seconds each',label='24 seconds each',
-                                 command = lambda s=self: s.mvprg("_ movie.add_scenes(None,24.0,rock=1,start=%d)"))
+            for angle, seconds in ((30, (2,4,8)), (60, (4,8,16)), (90, (6,12,24)), (120, (8,16,32))):
+                if angle != 30:
+                    self.menuBar.addmenuitem(mlabel, 'separator', '')
+                for sec in seconds:
+                    label = '%d deg. over %d sec.' % (angle, sec)
+                    self.menuBar.addmenuitem(mlabel, 'command', label, label=label,
+                            command=self.mvprg_scene_loop(sec, rock, angle))
 
         self.menuBar.addcascademenu('Scene Loop', 'No-Motion', 'Steady',
                                     label='Steady')
@@ -2221,7 +2192,7 @@ class Normal(PMGSkin):
                                  'Show Frame Frame.',
                                  label='Show Frame Rate',
                                  variable = self.setting.show_frame_rate,
-                                 command = lambda s=self: s.setting.update('show_frame_rate'))
+                                 )
         
         self.menuBar.addmenuitem('Frame Rate', 'command', 'Reset Meter',
                                          label='Reset Meter',
@@ -2233,38 +2204,38 @@ class Normal(PMGSkin):
                                  'Auto Interpolate',
                                  label='Auto Interpolate',
                                  variable = self.setting.movie_auto_interpolate,
-                                 command = lambda s=self: s.setting.update('movie_loop'))
+                                 )
 
         self.menuBar.addmenuitem('Movie', 'checkbutton',
                                  'Show Panel',
                                  label='Show Panel',
                                  variable = self.setting.movie_panel,
-                                 command = lambda s=self: s.setting.update('movie_panel'))
+                                 )
 
         self.menuBar.addmenuitem('Movie', 'checkbutton',
                                  'Loop Frames',
                                  label='Loop Frames',
                                  variable = self.setting.movie_loop,
-                                 command = lambda s=self: s.setting.update('movie_loop'))
+                                 )
 
 
         self.menuBar.addmenuitem('Movie', 'checkbutton',
                                  'Photorealistic images.',
                                  label='Draw Frames',
                                  variable = self.setting.draw_frames,
-                                 command = lambda s=self: s.setting.update('draw_frames'))
+                                 )
 
         self.menuBar.addmenuitem('Movie', 'checkbutton',
                                  'Photorealistic images.',
                                  label='Ray Trace Frames',
                                  variable = self.setting.ray_trace_frames,
-                                 command = lambda s=self: s.setting.update('ray_trace_frames'))
+                                 )
 
         self.menuBar.addmenuitem('Movie', 'checkbutton',
                                  'Save images in memory.',
                                  label='Cache Frame Images',
                                 variable = self.setting.cache_frames,
-                                command = lambda s=self: s.setting.update('cache_frames'))
+                                )
 
         self.menuBar.addmenuitem('Movie', 'command', 'Clear Image Cache',
                                          label='Clear Image Cache',
@@ -2276,13 +2247,13 @@ class Normal(PMGSkin):
                                  'Static Singletons Objects',
                                  label='Static Singletons',
                                 variable = self.setting.static_singletons,
-                                command = lambda s=self: s.setting.update('static_singletons'))
+                                )
 
         self.menuBar.addmenuitem('Movie', 'checkbutton',
                                  'Superimpose all molecular states.',
                                  label='Show All States',
                                 variable = self.setting.all_states,
-                                command = lambda s=self: s.setting.update('all_states'))
+                                )
 
         self.menuBar.addmenu('Display', 'Display Control',tearoff=TRUE)
 
@@ -2290,7 +2261,7 @@ class Normal(PMGSkin):
                                  'Sequence',
                                  label='Sequence',
                                 variable = self.setting.seq_view,
-                                command = lambda s=self: s.setting.update('seq_view'))      
+                                )
 
         self.menuBar.addcascademenu('Display', 'Sequence', 'Sequence Mode',
                                          label='Sequence Mode')
@@ -2339,8 +2310,7 @@ class Normal(PMGSkin):
                                  'Stereo',
                                  label='Stereo',
                                 variable = self.setting.stereo,
-                                command = lambda s=self: s.cmd.do("_ stereo "+
-                                                                          ('off','on')[s.setting.stereo.get()]))
+                                )
         
 #      self.menuBar.addmenuitem('Display', 'command', 'Stereo On',
 #                               label='Stereo On',
@@ -2446,13 +2416,13 @@ class Normal(PMGSkin):
                                  'Opaque Background Color',
                                  label='Opaque',
                                 variable = self.setting.opaque_background,
-                                command = lambda s=self: s.setting.update('opaque_background'))
+                                )
 
         self.menuBar.addmenuitem('Background', 'checkbutton',
                                  'Show Alpha Checker',
                                  label='Show Alpha Checker',
                                 variable = self.setting.show_alpha_checker,
-                                command = lambda s=self: s.setting.update('show_alpha_checker'))
+                                )
 
         self.menuBar.addmenuitem('Background', 'separator', '')
         
@@ -2528,58 +2498,64 @@ class Normal(PMGSkin):
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Disable perspective.',
                                  label='Orthoscopic View',
-                                variable = self.setting.ortho,
-                                command = lambda s=self: s.setting.update('ortho'))
+                                variable = self.setting.ortho)
 
 
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Show Valences.',
                                  label='Show Valences',
                                 variable = self.setting.valence,
-                                command = lambda s=self: s.setting.update('valence'))
+                                )
 
 
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Smooth Lines.',
                                  label='Smooth Lines',
                                 variable = self.setting.line_smooth,
-                                command = lambda s=self: s.setting.update('line_smooth'))
+                                )
 
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Depth Cue (Fogging).',
                                  label='Depth Cue',
                                 variable = self.setting.depth_cue,
-                                command = lambda s=self: s.setting.update('depth_cue'))
+                                )
 
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Two Sided Lighting.',
                                  label='Two Sided Lighting',
                                 variable = self.setting.two_sided_lighting,
-                                command = lambda s=self: s.setting.update('two_sided_lighting'))
+                                )
 
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Specular Reflections.',
                                  label='Specular Reflections',
                                 variable = self.setting.specular,
-                                command = lambda s=self: s.setting.update('specular'))
+                                onvalue=1.0, offvalue=0.0,
+                                )
 
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Use Display Lists.',
                                  label='Use Display Lists',
                                 variable = self.setting.use_display_lists,
-                                command = lambda s=self: s.setting.update('use_display_lists'))
+                                )
 
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Texture Fonts',
                                  label='Texture Fonts',
                                 variable = self.setting.texture_fonts,
-                                command = lambda s=self: s.setting.update('texture_fonts'))
+                                )
 
         self.menuBar.addmenuitem('Display', 'checkbutton',
                                  'Animation',
                                  label='Animation',
                                 variable = self.setting.animation,
-                                command = lambda s=self: s.setting.update('animation'))
+                                )
+
+        self.menuBar.addmenuitem('Display', 'checkbutton',
+                                 'Roving Detail',
+                                 label='Roving Detail',
+                                variable = self.setting.roving_detail,
+                                )
 
         self.menuBar.addmenu('Setting', 'Settings and Configuration',tearoff=TRUE)
 
@@ -2758,7 +2734,7 @@ class Normal(PMGSkin):
                                  'Side Chain Helper',
                                  label='Side Chain Helper',
                                 variable = self.setting.cartoon_side_chain_helper,
-                                command = lambda s=self: s.setting.update('cartoon_side_chain_helper'))
+                                )
 
         self.menuBar.addmenuitem('Rings', 'separator', '')
 
@@ -2774,50 +2750,51 @@ class Normal(PMGSkin):
                                  'Round Helices',
                                  label='Round Helices',
                                 variable = self.setting.cartoon_round_helices,
-                                command = lambda s=self: s.setting.update('cartoon_round_helices'))
+                                )
 
         self.menuBar.addmenuitem('Cartoon', 'checkbutton',
                                  'Fancy Helices',
                                  label='Fancy Helices',
                                 variable = self.setting.cartoon_fancy_helices,
-                                command = lambda s=self: s.setting.update('cartoon_fancy_helices'))
+                                )
 
         self.menuBar.addmenuitem('Cartoon', 'checkbutton',
                                  'Cylindrical Helices',
                                  label='Cylindrical Helices',
                                 variable = self.setting.cartoon_cylindrical_helices,
-                                command = lambda s=self: s.setting.update('cartoon_cylindrical_helices'))
+                                )
 
         self.menuBar.addmenuitem('Cartoon', 'checkbutton',
                                  'Flat Sheets',
                                  label='Flat Sheets',
                                 variable = self.setting.cartoon_flat_sheets,
-                                command = lambda s=self: s.setting.update('cartoon_flat_sheets'))
+                                )
 
 
         self.menuBar.addmenuitem('Cartoon', 'checkbutton',
                                  'Fancy Sheets',
                                  label='Fancy Sheets',
                                 variable = self.setting.cartoon_fancy_sheets,
-                                command = lambda s=self: s.setting.update('cartoon_fancy_sheets'))
+                                )
 
         self.menuBar.addmenuitem('Cartoon', 'checkbutton',
                                  'Smooth Loops',
                                  label='Smooth Loops',
                                 variable = self.setting.cartoon_smooth_loops,
-                                command = lambda s=self: s.setting.update('cartoon_smooth_loops'))
+                                )
 
         self.menuBar.addmenuitem('Cartoon', 'checkbutton',
                                  'Discrete Colors',
                                  label='Discrete Colors',
                                 variable = self.setting.cartoon_discrete_colors,
-                                command = lambda s=self: s.setting.update('cartoon_discrete_colors'))
+                                )
 
         self.menuBar.addmenuitem('Cartoon', 'checkbutton',
                                  'Highlight Color',
                                  label='Highlight Color',
                                 variable = self.setting.cartoon_highlight_color,
-                                command = lambda s=self: s.setting.update('cartoon_highlight_color'))
+                                onvalue=104, offvalue=-1,
+                                )
 
         self.menuBar.addcascademenu('Setting', 'Ribbon', 'Ribbon',
                                              label='Ribbon')
@@ -2826,13 +2803,13 @@ class Normal(PMGSkin):
                                  'Side Chain Helper',
                                  label='Side Chain Helper',
                                 variable = self.setting.ribbon_side_chain_helper,
-                                command = lambda s=self: s.setting.update('ribbon_side_chain_helper'))
+                                )
         
         self.menuBar.addmenuitem('Ribbon', 'checkbutton',
                                  'Trace Atoms',
                                  label='Trace Atoms',
                                 variable = self.setting.ribbon_trace_atoms,
-                                command = lambda s=self: s.setting.update('ribbon_trace_atoms'))
+                                )
 
         self.menuBar.addcascademenu('Setting', 'Surface', 'Surface',
                                              label='Surface')
@@ -2964,7 +2941,7 @@ class Normal(PMGSkin):
                                  'Solvent Accessible',
                                  label='Solvent Accessible',
                                  variable = self.setting.surface_solvent,
-                                 command = lambda s=self: s.setting.update('surface_solvent'))
+                                 )
 
         self.menuBar.addmenuitem('Surface', 'separator', '')
         
@@ -3022,7 +2999,11 @@ class Normal(PMGSkin):
                                  'Smooth raytracing.',
                                  label='Antialias',
                                 variable = self.setting.antialias,
-                                command = lambda s=self: s.setting.update('antialias'))
+                                )
+
+        self.menuBar.addmenuitem('Rendering', 'command', 'Modernize',
+                                 label='Modernize',
+                                 command = lambda s=self: s.util.modernize_rendering(1,s.cmd))
 
         self.menuBar.addmenuitem('Rendering', 'separator', '')
         
@@ -3062,6 +3043,9 @@ class Normal(PMGSkin):
                                         label='Occlusion',
                                          command = lambda s=self: s.cmd.do("_ util.ray_shadows('occlusion')"))
 
+        self.menuBar.addmenuitem('Shadows', 'command', 'Occlusion 2',
+                                        label='Occlusion 2',
+                                         command = lambda s=self: s.cmd.do("_ util.ray_shadows('occlusion2')"))
 
 
         self.menuBar.addcascademenu('Rendering', 'Texture', 'Texture',
@@ -3148,14 +3132,15 @@ class Normal(PMGSkin):
                                  'Cull Backfaces when Rendering',
                                  label='Cull Backfaces',
                                 variable = self.setting.backface_cull,
-                                command = lambda s=self: s.setting.update('backface_cull'))
+                                )
 
 
         self.menuBar.addmenuitem('Rendering', 'checkbutton',
                                  'Opaque Interior Colors',
                                  label='Opaque Interiors',
                                 variable = self.setting.ray_interior_color,
-                                command = lambda s=self: s.setting.update('ray_interior_color'))
+                                onvalue=74, offvalue=-1,
+                                )
 
         self.menuBar.addmenuitem('Setting', 'separator', '')
 
@@ -3232,31 +3217,31 @@ class Normal(PMGSkin):
                                          'Ignore PDB segi.',
                                          label='Ignore PDB Segment Identifier',
                                          variable = self.setting.ignore_pdb_segi,
-                                         command = lambda s=self: s.setting.update('ignore_pdb_segi'))
+                                         )
 
         self.menuBar.addmenuitem('Setting', 'checkbutton',
                                  'Auto-Zoom.',
                                  label='Auto-Zoom New Objects',
                                 variable = self.setting.auto_zoom,
-                                command = lambda s=self: s.setting.update('auto_zoom'))
+                                )
 
         self.menuBar.addmenuitem('Setting', 'checkbutton',
                                  'Auto-Show Selections.',
                                  label='Auto-Show New Selections',
                                 variable = self.setting.auto_show_selections,
-                                command = lambda s=self: s.setting.update('auto_show_selections'))
+                                )
 
         self.menuBar.addmenuitem('Setting', 'checkbutton',
                                  'Auto-Hide Selections.',
                                  label='Auto-Hide Selections',
                                 variable = self.setting.auto_hide_selections,
-                                command = lambda s=self: s.setting.update('auto_hide_selections'))
+                                )
 
         self.menuBar.addmenuitem('Setting', 'checkbutton',
                                  'Auto-Remove Hydrogens.',
                                  label='Auto-Remove Hydrogens',
                                 variable = self.setting.auto_remove_hydrogens,
-                                command = lambda s=self: s.setting.update('auto_remove_hydrogens'))
+                                )
 
         self.menuBar.addmenuitem('Setting', 'separator', '')
 
@@ -3273,7 +3258,7 @@ class Normal(PMGSkin):
                                  'Overlay Text Output on Graphics',
                                  label='Overlay Text',
                                 variable = self.setting.overlay,
-                                command = lambda s=self: s.setting.update('overlay'))
+                                )
 
         self.menuBar.addmenu('Scene', 'Scene Storage',tearoff=TRUE)
 
@@ -3357,7 +3342,7 @@ class Normal(PMGSkin):
         self.menuBar.addmenuitem('Scene', 'checkbutton', 'Buttons',
                                  label='Buttons',
                                  variable = self.setting.scene_buttons,
-                                 command = lambda s=self: s.setting.update('scene_buttons'))
+                                 )
 
         self.menuBar.addcascademenu('Scene', 'Cache', 'Cache',
                                     label='Cache')
@@ -3440,6 +3425,10 @@ class Normal(PMGSkin):
                                          label='3 Button Viewing',
                                          command = lambda s=self: s.cmd.mouse('three_button_viewing'))
 
+        self.menuBar.addmenuitem('Mouse', 'command', '3 Button Lights',
+                                         label='3 Button Lights',
+                                         command = lambda s=self: s.cmd.mouse('three_button_lights'))
+
         self.menuBar.addmenuitem('Mouse', 'command', '3 Button All Modes',
                                          label='3 Button All Modes',
                                          command = lambda s=self: s.cmd.config_mouse('three_button_all_modes'))
@@ -3451,6 +3440,10 @@ class Normal(PMGSkin):
         self.menuBar.addmenuitem('Mouse', 'command', '2 Button Viewing',
                                          label='2 Button Viewing',
                                          command = lambda s=self: s.cmd.config_mouse('two_button'))
+
+        self.menuBar.addmenuitem('Mouse', 'command', '2 Button Lights',
+                                         label='2 Button Lights',
+                                         command = lambda s=self: s.cmd.config_mouse('two_button_lights'))
 
         self.menuBar.addmenuitem('Mouse', 'command', '1 Button Viewing Mode',
                                          label='1 Button Viewing Mode',
@@ -3471,25 +3464,25 @@ class Normal(PMGSkin):
                                  'Virtual Trackball.',
                                  label='Virtual Trackball',
                                 variable = self.setting.virtual_trackball,
-                                command = lambda s=self: s.setting.update('virtual_trackball'))
+                                )
 
         self.menuBar.addmenuitem('Mouse', 'checkbutton',
                                  'Show Mouse Grid.',
                                  label='Show Mouse Grid',
                                 variable = self.setting.mouse_grid,
-                                command = lambda s=self: s.setting.update('mouse_grid'))
+                                )
 
         self.menuBar.addmenuitem('Mouse', 'checkbutton',
                                  'Roving Origin.',
                                  label='Roving Origin',
                                 variable = self.setting.roving_origin,
-                                command = lambda s=self: s.setting.update('roving_origin'))
+                                )
 
 #        self.menuBar.addmenuitem('Mouse', 'checkbutton',
 #                                 'Roving Detail.',
 #                                 label='Roving Detail',
 #                                variable = self.setting.roving_detail,
-#                                command = lambda s=self: s.setting.update('roving_detail'))
+#                                )
 
         if sys.platform == 'darwin':
             self.menuBar.addmenuitem('Mouse', 'separator', '')
@@ -3629,25 +3622,6 @@ class Normal(PMGSkin):
             '_ replace_wizard demo,finish'))
 
         self.menuBar.addmenu('Plugin', 'Plugin',tearoff=TRUE)      
-
-        self.menuBar.addcascademenu('Plugin', 'PluginAction', 'Manage Plugins',
-                                             label='Manage Plugins')
-
-        self.menuBar.addmenuitem('PluginAction', 'command', 'Install',
-                                         label='Install...',
-                                         command = lambda s=self: s.app.installPlugin())
-
-        self.menuBar.addmenuitem('PluginAction', 'command', 'Remove',
-                                 label='Remove...',
-                                 command = lambda s=self: s.app.removePlugin())
-
-        self.menuBar.addmenuitem('PluginAction', 'separator', '')
-        
-        self.menuBar.addmenuitem('PluginAction', 'command', 'About',
-                                         label='About',
-                                         command = lambda s=self: s.aboutPlugins())
-
-        self.menuBar.addmenuitem('Plugin', 'separator', '')
 
     def show_about(self):
         Pmw.aboutversion(self.appversion)

@@ -439,7 +439,7 @@ class ValenceWizard(RepeatableActionWizard):
         self.cmd.button('double_left','none','MovA')
         
     def do_pick(self, bondFlag):
-        self.cmd.select(active_sele, "bymol pk1") 
+        self.cmd.select(active_sele, "bymol pk1")
         if bondFlag:
             if self.order>=0:
                 self.cmd.valence(self.order, "pk1", "pk2")
@@ -450,7 +450,7 @@ class ValenceWizard(RepeatableActionWizard):
         else:
             self.cmd.button('double_left','none','PkBd')
             self.cmd.button('single_left','none','PkBd')
-            self.cmd.unpick()
+        self.cmd.unpick()
         if not self.getRepeating():
             self.actionWizardDone()
 
@@ -1004,7 +1004,7 @@ class FragmentFrame(GuiFrame):
 #        GuiLabel(self, "Fragments")
 
         GuiButton(self, "CH4", lambda s=self: s.grow("methane",1,0,"methyl"), "Methane")
-        GuiButton(self, "C=C", lambda s=self: s.grow("ethylene",4,0,"vinyl"), "Enthylene")
+        GuiButton(self, "C=C", lambda s=self: s.grow("ethylene",4,0,"vinyl"), "Ethylene")
         GuiButton(self, "C#C", lambda s=self: s.grow("acetylene",2,0,"alkynl"), "Acetylene")
         GuiButton(self, "C#N", lambda s=self: s.grow("cyanide",2,0,"cyano"), "Cyanide")
         GuiButton(self, "C=O", lambda s=self: s.grow("formaldehyde",2,0,"carbonyl",), "Aldehyde")
@@ -1054,9 +1054,9 @@ class ModifyFrame(GuiFrame):
         self.cmd = self.builder.cmd
         GuiFrame.__init__(self, parent)
         GuiLabel(self, " Charge", width=6)
-        GuiButton(self, "+1", lambda s=self: s.setCharge("1.0","+1"), "Positive Charge")
-        GuiButton(self, "0", lambda s=self: s.setCharge("0.0","neutral"), "Neutral Charge")
-        GuiButton(self, "-1", lambda s=self: s.setCharge("-1.0","-1"), "Negative Charge")
+        GuiButton(self, "+1", lambda s=self: s.setCharge(1,"+1"), "Positive Charge")
+        GuiButton(self, "0", lambda s=self: s.setCharge(0,"neutral"), "Neutral Charge")
+        GuiButton(self, "-1", lambda s=self: s.setCharge(-1,"-1"), "Negative Charge")
 
         l = Label(self, text="Bonds", width=7)
         l.grid(row=self.row, column=self.col, sticky=E)
@@ -1078,10 +1078,7 @@ class ModifyFrame(GuiFrame):
             for sele in picked:
                 self.cmd.alter(sele,"formal_charge=%s" % charge)
                 self.cmd.h_fill()
-                if abs(float(charge))>0.0001:
-                    self.cmd.label(sele,"'''"+text+"'''")
-                else:
-                    self.cmd.label(sele)
+                self.cmd.label(sele,'"%+d" % formal_charge if formal_charge else ""')
             self.cmd.unpick()
         else:
             ChargeWizard(self.cmd).toggle(charge, text)

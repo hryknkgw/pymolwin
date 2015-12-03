@@ -30,6 +30,8 @@ Z* -------------------------------------------------------------------
 #define cPLog_pym       2
 #define cPLog_no_flush  3
 
+char convertStereoToChar(int stereo);
+
 int PLabelExprUsesVariable(PyMOLGlobals * G, char *expr, char *var);
 
 int PLabelAtomAlt(PyMOLGlobals * G, AtomInfoType * at, char *model, char *expr,
@@ -115,10 +117,10 @@ void PExit(PyMOLGlobals * G, int code);
 void PParse(PyMOLGlobals * G, char *str);       /* only accepts one command */
 void PDo(PyMOLGlobals * G, char *str);  /* accepts multple commands seperated by newlines */
 
-int PAlterAtom(PyMOLGlobals * G, AtomInfoType * at, char *expr,
+int PAlterAtom(PyMOLGlobals * G, AtomInfoType * at, PyCodeObject *expr_co,
                int read_only, char *model, int index, PyObject * space);
 int PLabelAtom(PyMOLGlobals * G, AtomInfoType * at, char *model, char *expr, int index);
-int PAlterAtomState(PyMOLGlobals * G, float *v, char *expr, int read_only,
+int PAlterAtomState(PyMOLGlobals * G, float *v, PyCodeObject *expr_co, int read_only,
                     AtomInfoType * at, char *model, int index, PyObject * space);
 
 void PLog(PyMOLGlobals * G, char *str, int lf);

@@ -286,6 +286,9 @@ SEE ALSO
 
     frame
     '''
+        for t in async_threads:
+            t.join()
+
         now = time.time()
         timeout = float(timeout)
         poll = float(poll)
@@ -383,7 +386,7 @@ USAGE (PYTHON)
         if _self._raising(r,_self): raise pymol.CmdException
         return r
 
-    def quit(_self=cmd):
+    def quit(code=0, _self=cmd):
         '''
 DESCRIPTION
 
@@ -397,12 +400,13 @@ PYMOL API
 
     cmd.quit()
         '''
+        code = int(code)
         if thread.get_ident() == pymol.glutThread:
-            _self._quit(_self)
+            _self._quit(code, _self)
         else:
             try:
                 _self.lock(_self)
-                _cmd.do(_self._COb,"_ time.sleep(0.100);cmd._quit()",0,0)
+                _cmd.do(_self._COb,"_ time.sleep(0.100);cmd._quit(%d)" % (code),0,0)
                 # allow time for a graceful exit from the calling thread
                 try:
                     thread.exit()
@@ -442,7 +446,7 @@ SEE ALSO
         if _self._raising(r,_self): raise pymol.CmdException      
         return r
 
-    def extend(name,function,_self=cmd):
+    def extend(name, function=None, _self=cmd):
         
         '''
 DESCRIPTION
@@ -479,9 +483,12 @@ SEE ALSO
 
     alias, api
             '''
+        if function is None:
+            name, function = name.__name__, name
         _self.keyword[name] = [function, 0,0,',',parsing.STRICT]
         _self.kwhash.append(name)
         _self.help_sc.append(name)
+        return function
 
         # for aliasing compound commands to a single keyword
 
@@ -521,10 +528,45 @@ SEE ALSO
                                0,0,',',parsing.STRICT]
         _self.kwhash.append(name)
 
-    def dummy(*arg):
+    def dummy(*arg, **kw):
         '''
 DESCRIPTION
 
     This is a dummy function which returns None.
             '''
         return None
+
+    async_threads = []
+
+    def async(func, *args, **kwargs):
+        '''
+DESCRIPTION
+
+    Run function threaded and show "please wait..." message.
+        '''
+        from .wizard.message import Message
+
+        _self = kwargs.pop('_self', cmd)
+
+        wiz = Message(['please wait ...'], dismiss=0, _self=_self)
+        _self.set_wizard(wiz)
+
+        if isinstance(func, str):
+            func = _self.keyword[func][0]
+
+        def wrapper():
+            async_threads.append(t)
+            try:
+                func(*args, **kwargs)
+            except (pymol.CmdException, cmd.QuietException) as e:
+                if e.args:
+                    print e
+            finally:
+                _self.set_wizard_stack(filter(lambda w: w != wiz,
+                    _self.get_wizard_stack()))
+                _self.refresh_wizard()
+                async_threads.remove(t)
+
+        t = threading.Thread(target=wrapper)
+        t.setDaemon(1)
+        t.start()

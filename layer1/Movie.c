@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -36,6 +37,7 @@ Z* -------------------------------------------------------------------
 #include"PyMOL.h"
 #include"ScrollBar.h"
 #include"Menu.h"
+#include"View.h"
 
 #define cMovieDragModeMoveKey   1
 #define cMovieDragModeInsDel    2
@@ -250,8 +252,8 @@ void MovieCopyPrepare(PyMOLGlobals * G, int *width, int *height, int *length)
   register CMovie *I = G->Movie;
   int nFrame;
 
-  I->CacheSave = (int) SettingGet(G, cSetting_cache_frames);
-  I->OverlaySave = (int) SettingGet(G, cSetting_overlay);
+  I->CacheSave = SettingGetGlobal_b(G, cSetting_cache_frames);
+  I->OverlaySave = SettingGetGlobal_i(G, cSetting_overlay);
   if(!I->CacheSave)
     MovieClearImages(G);
   SettingSet(G, cSetting_cache_frames, 1.0);
@@ -623,7 +625,7 @@ void MoviePlay(PyMOLGlobals * G, int cmd)
   switch (cmd) {
   case cMovieToggle:
     I->Playing = !I->Playing;
-    if(I->Playing && !(int) SettingGet(G, cSetting_movie_loop)) {
+    if(I->Playing && !SettingGetGlobal_b(G, cSetting_movie_loop)) {
       /* if not looping, and at end of movie, then automatically rewind
          and force execution of the first movie command */
       if((SettingGetGlobal_i(G, cSetting_frame)) == (SceneGetNFrame(G, NULL))) {
@@ -635,7 +637,7 @@ void MoviePlay(PyMOLGlobals * G, int cmd)
     I->Playing = false;
     break;
   case cMoviePlay:
-    if(!(int) SettingGet(G, cSetting_movie_loop)) {
+    if(!SettingGetGlobal_b(G, cSetting_movie_loop)) {
       /* if not looping, and at end of movie, then automatically rewind
          and force execution of the first movie command */
       if((SettingGetGlobal_i(G, cSetting_frame)) == (SceneGetNFrame(G, NULL))) {
@@ -693,7 +695,7 @@ static void MovieModalPNG(PyMOLGlobals * G, CMovie * I, CMovieModal * M)
   switch (M->stage) {
   case 0:                      /* setup */
     MovieSetRealtime(G, false);
-    M->save = (int) SettingGet(G, cSetting_cache_frames);
+    M->save = SettingGetGlobal_b(G, cSetting_cache_frames);
     if(!M->save)
       MovieClearImages(G);
     SettingSet(G, cSetting_cache_frames, 1.0);
@@ -1008,7 +1010,7 @@ void MovieAppendSequence(PyMOLGlobals * G, char *str, int start_from,int freeze)
 int MovieFrameToImage(PyMOLGlobals * G, int frame)
 {
   int result = 0;
-  int single_image = (int) SettingGet(G, cSetting_single_image);
+  int single_image = SettingGetGlobal_b(G, cSetting_single_image);
   if(single_image)
     result = MovieFrameToIndex(G, frame);
   else
@@ -1615,6 +1617,10 @@ static int MovieClick(Block * block, int button, int x, int y, int mod)
         break;
       default:
         ScrollBarDoClick(I->ScrollBar, button, x, y, mod);
+        {
+	  float scroll_value = ScrollBarGetValue(I->ScrollBar);
+	  SceneSetFrame(G, 7, scroll_value);
+	}
         break;
       }
     }
@@ -1793,15 +1799,25 @@ int MovieGetPanelHeight(PyMOLGlobals * G)
   }
 }
 
-void MovieDrawViewElem(PyMOLGlobals *G, BlockRect *rect,int frames)
+void MovieDrawViewElem(PyMOLGlobals *G, BlockRect *rect,int frames ORTHOCGOARG)
 {
   CMovie *I = G->Movie;
   if(I->ViewElem) {
-    ViewElemDraw(G,I->ViewElem,rect,frames,"camera");
+    ViewElemDraw(G,I->ViewElem,rect,frames,"camera" ORTHOCGOARGVAR);
   }
 }
 
-static void MovieDraw(Block * block)
+short MovieFastDraw(Block * block ORTHOCGOARG)
+{
+  PyMOLGlobals *G = block->G;
+  CMovie *I = G->Movie;
+  //  ScrollBarDrawHandle(I->ScrollBar, 0.35F ORTHOCGOARGVAR);
+  ScrollBarDoDrawNoFill(I->ScrollBar ORTHOCGOARGVAR);
+  ScrollBarDrawHandle(I->ScrollBar, 0.35F ORTHOCGOARGVAR);
+  return true;
+}
+
+static void MovieDraw(Block * block ORTHOCGOARG)
 {
   PyMOLGlobals *G = block->G;
   CMovie *I = G->Movie;
@@ -1815,13 +1831,23 @@ static void MovieDraw(Block * block)
 
       if(G->HaveGUI && G->ValidContext) {
         float black[3] = {0.0F,0.0F,0.0F};
-        glColor3fv(black);
-        glBegin(GL_POLYGON);
-        glVertex2f(rect.right, rect.bottom);
-        glVertex2f(rect.right, rect.top);
-        glVertex2f(block->rect.right, rect.top);
-        glVertex2f(block->rect.right, rect.bottom);
-        glEnd();
+	if (orthoCGO){
+	  CGOColorv(orthoCGO, black);
+	  CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	  CGOVertex(orthoCGO, rect.right, rect.bottom, 0.f);
+	  CGOVertex(orthoCGO, rect.right, rect.top, 0.f);
+	  CGOVertex(orthoCGO, block->rect.right, rect.bottom, 0.f);
+	  CGOVertex(orthoCGO, block->rect.right, rect.top, 0.f);
+	  CGOEnd(orthoCGO);
+	} else {
+	  glColor3fv(black);
+	  glBegin(GL_POLYGON);
+	  glVertex2f(rect.right, rect.bottom);
+	  glVertex2f(rect.right, rect.top);
+	  glVertex2f(block->rect.right, rect.top);
+	  glVertex2f(block->rect.right, rect.bottom);
+	  glEnd();
+	}
       }
 
       if(!n_frame) {
@@ -1830,20 +1856,26 @@ static void MovieDraw(Block * block)
       } else {
         float scroll_value = ScrollBarGetValue(I->ScrollBar);
         int new_frame = (int) (scroll_value + 0.5F);
-        if(new_frame != frame) {
-          frame = new_frame;
-          SceneSetFrame(G, 7, frame);
-        }
-        if(!ScrollBarGrabbed(I->ScrollBar)) {
+        if(ScrollBarGrabbed(I->ScrollBar)) {
+	  if(new_frame != frame) {
+	    frame = new_frame;
+	    SceneSetFrame(G, 7, frame);
+	  }
+	} else {
           ScrollBarSetValue(I->ScrollBar, frame);
         }
         ScrollBarSetLimits(I->ScrollBar, n_frame, 1);
       }
       ScrollBarSetBox(I->ScrollBar, rect.top,
                       rect.left, rect.bottom, rect.right);
-      ScrollBarDoDraw(I->ScrollBar);
-      ExecutiveMotionDraw(G,&rect,count);
-      ScrollBarDrawHandle(I->ScrollBar, 0.35F);
+      if (orthoCGO){
+	ScrollBarFill(I->ScrollBar ORTHOCGOARGVAR);
+	ExecutiveMotionDraw(G,&rect,count ORTHOCGOARGVAR);
+      } else {
+	ScrollBarDoDraw(I->ScrollBar ORTHOCGOARGVAR);
+	ExecutiveMotionDraw(G,&rect,count ORTHOCGOARGVAR);
+	ScrollBarDrawHandle(I->ScrollBar, 0.35F ORTHOCGOARGVAR);
+      }
 
       /* drag selection box */
       if(I->DragDraw) {
@@ -1856,9 +1888,9 @@ static void MovieDraw(Block * block)
           {
             float grey[4] = {0.75F,0.75F,0.75f,0.5};
             if(I->DragStartFrame<n_frame) 
-              ViewElemDrawBox(G,&I->DragRect, I->DragStartFrame, I->DragStartFrame+1, n_frame, white, false);        
+              ViewElemDrawBox(G,&I->DragRect, I->DragStartFrame, I->DragStartFrame+1, n_frame, white, false ORTHOCGOARGVAR);        
             if((I->DragCurFrame>=0) && (I->DragCurFrame<n_frame)) {
-              ViewElemDrawBox(G,&I->DragRect, I->DragCurFrame, I->DragCurFrame+1, n_frame, grey, true);
+              ViewElemDrawBox(G,&I->DragRect, I->DragCurFrame, I->DragCurFrame+1, n_frame, grey, true ORTHOCGOARGVAR);
             }
           }
           break;
@@ -1872,19 +1904,19 @@ static void MovieDraw(Block * block)
             if(max_frame<0) max_frame = 0;
             if(min_frame>=n_frame) min_frame = n_frame - 1;
             if(max_frame>=n_frame) max_frame = n_frame - 1;
-            ViewElemDrawBox(G,&I->DragRect, min_frame, max_frame+1, n_frame, white, false);        
-            ViewElemDrawBox(G,&I->DragRect, min_frame, max_frame+1, n_frame, grey, true);
+            ViewElemDrawBox(G,&I->DragRect, min_frame, max_frame+1, n_frame, white, false ORTHOCGOARGVAR);        
+            ViewElemDrawBox(G,&I->DragRect, min_frame, max_frame+1, n_frame, grey, true ORTHOCGOARGVAR);
           }
           break;
         case cMovieDragModeInsDel:
           if(I->DragCurFrame==I->DragStartFrame) {
-            ViewElemDrawBox(G,&I->DragRect, I->DragStartFrame, I->DragStartFrame, n_frame, white, true);        
+            ViewElemDrawBox(G,&I->DragRect, I->DragStartFrame, I->DragStartFrame, n_frame, white, true ORTHOCGOARGVAR);        
           } else if(I->DragCurFrame>=I->DragStartFrame) {
             float green[4] = {0.5F, 1.0F, 0.5F,0.5F};
-            ViewElemDrawBox(G,&I->DragRect, I->DragStartFrame, I->DragCurFrame, n_frame, green, true);        
+            ViewElemDrawBox(G,&I->DragRect, I->DragStartFrame, I->DragCurFrame, n_frame, green, true ORTHOCGOARGVAR);        
           } else {
             float red[4] = {1.0F, 0.5F, 0.5F,0.5F};          
-            ViewElemDrawBox(G,&I->DragRect, I->DragCurFrame, I->DragStartFrame, n_frame, red, true);        
+            ViewElemDrawBox(G,&I->DragRect, I->DragCurFrame, I->DragStartFrame, n_frame, red, true ORTHOCGOARGVAR);        
           }
           break;
         }
@@ -1929,6 +1961,7 @@ int MovieInit(PyMOLGlobals * G)
     I->Block->fClick = MovieClick;
     I->Block->fDrag = MovieDrag;
     I->Block->fDraw = MovieDraw;
+    I->Block->fFastDraw = MovieFastDraw;
     I->Block->fReshape = MovieReshape;
     I->Block->active = true;
     I->ScrollBar = ScrollBarNew(G, true);

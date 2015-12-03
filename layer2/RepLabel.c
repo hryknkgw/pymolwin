@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -35,14 +36,18 @@ typedef struct RepLabel {
   int *L;
   int N;
   int OutlineColor;
+  CGO *shaderCGO;
 } RepLabel;
+
+#define SHADERCGO I->shaderCGO
 
 #include"ObjectMolecule.h"
 
 void RepLabelFree(RepLabel * I);
 
-void RepLabelInit(void)
+void RepLabelInit(RepLabel *I)
 {
+  I->shaderCGO = NULL;
 }
 
 void RepLabelFree(RepLabel * I)
@@ -50,6 +55,9 @@ void RepLabelFree(RepLabel * I)
   FreeP(I->R.P);
   FreeP(I->V);
   FreeP(I->L);
+  if (I->shaderCGO){
+    CGOFree(I->shaderCGO);
+  }
   OOFreeP(I);
 }
 
@@ -82,11 +90,16 @@ static void RepLabelRender(RepLabel * I, RenderInfo * info)
     }
   } else if(G->HaveGUI && G->ValidContext) {
     if(pick) {
+      if (I->shaderCGO){
+	CGORenderGLPicking(I->shaderCGO, pick, &I->R.context, I->R.cs->Setting, I->R.obj->Setting);
+	return;
+      }
       Pickable *p = I->R.P;
       int i;
+      SceneSetupGLPicking(G);
       if(c) {
         char *st;
-        int float_text = (int) SettingGet(G, cSetting_float_labels);
+        int float_text = SettingGetGlobal_i(G, cSetting_float_labels);
         if(float_text)
           glDisable(GL_DEPTH_TEST);
 
@@ -104,7 +117,7 @@ static void RepLabelRender(RepLabel * I, RenderInfo * info)
               (*pick)[i].context = I->R.context;
             }
             st = OVLexicon_FetchCString(G->Lexicon, *l);
-            TextRenderOpenGL(G, info, font_id, st, font_size, v + 6);
+            TextRenderOpenGL(G, info, font_id, st, font_size, v + 6, SHADERCGO);
           }
           l++;
           v += 9;
@@ -116,23 +129,56 @@ static void RepLabelRender(RepLabel * I, RenderInfo * info)
     } else {
       if(c) {
         char *st;
-        int float_text = (int) SettingGet(G, cSetting_float_labels);
+        int float_text = SettingGetGlobal_i(G, cSetting_float_labels);
+	short use_shader;
+	Pickable *p = I->R.P;
+	use_shader = SettingGetGlobal_b(G, cSetting_use_shaders);
         if(float_text)
           glDisable(GL_DEPTH_TEST);
-        if(!info->line_lighting)
-          glDisable(GL_LIGHTING);
+	if (use_shader){
+	  if (!I->shaderCGO){
+	    I->shaderCGO = CGONew(G);
+	    if (use_shader){
+	      I->shaderCGO->use_shader = true;
+	      I->shaderCGO->enable_shaders = true;
+	    }
+	  } else {
+	    CGORenderGL(I->shaderCGO, NULL, NULL, NULL, info, &I->R);
+	    if(float_text)
+	      glEnable(GL_DEPTH_TEST);
+	    return;
+	  }
+	} else if (I->shaderCGO) {
+	  CGOFree(I->shaderCGO);
+	  I->shaderCGO = NULL;
+	}
         TextSetOutlineColor(G, I->OutlineColor);
+
         while(c--) {
           if(*l) {
+	    p++;
+	    if (I->shaderCGO)
+	      CGOPickColor(I->shaderCGO, p->index, p->bond);
             TextSetPosNColor(G, v + 3, v);
             st = OVLexicon_FetchCString(G->Lexicon, *l);
-            TextRenderOpenGL(G, info, font_id, st, font_size, v + 6);
+            TextRenderOpenGL(G, info, font_id, st, font_size, v + 6, SHADERCGO);
           }
           l++;
           v += 9;
         }
-        glEnable(GL_LIGHTING);
-        glEnable(GL_BLEND);
+        if (I->shaderCGO){
+          CGO *convertcgo;
+	  CGOStop(I->shaderCGO);
+	  convertcgo = CGOOptimizeLabels(I->shaderCGO, 0);
+	  CGOFree(I->shaderCGO);
+	  I->shaderCGO = convertcgo;
+	  convertcgo = NULL;
+	  if (I->shaderCGO){
+	    I->shaderCGO->use_shader = true;
+	    I->shaderCGO->enable_shaders = true;
+	    CGORenderGL(I->shaderCGO, NULL, NULL, NULL, info, &I->R);
+	  }
+        }
         if(float_text)
           glEnable(GL_DEPTH_TEST);
       }
@@ -153,7 +199,7 @@ Rep *RepLabelNew(CoordSet * cs, int state)
   Pickable *rp = NULL;
   AtomInfoType *ai;
   OOAlloc(G, RepLabel);
-
+  RepLabelInit(I);
   obj = cs->Obj;
   vFlag = false;
   if(obj->RepVisCache[cRepLabel])
@@ -188,7 +234,7 @@ Rep *RepLabelNew(CoordSet * cs, int state)
   ErrChkPtr(G, I->V);
 
   I->OutlineColor =
-    SettingGet_i(G, cs->Setting, obj->Obj.Setting, cSetting_label_outline_color);
+    SettingGet_color(G, cs->Setting, obj->Obj.Setting, cSetting_label_outline_color);
 
   lab_pos = SettingGet_3fv(G, cs->Setting, obj->Obj.Setting, cSetting_label_position);
 
@@ -221,7 +267,8 @@ Rep *RepLabelNew(CoordSet * cs, int state)
 
       I->N++;
       if((at_label_color >= 0) ||
-         (at_label_color == cColorFront) || (at_label_color == cColorBack))
+         (at_label_color == cColorFront) ||
+	 (at_label_color == cColorBack))
         c1 = at_label_color;
       else
         c1 = *(cs->Color + a);

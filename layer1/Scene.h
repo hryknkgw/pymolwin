@@ -46,6 +46,24 @@ typedef struct {
 
 typedef float SceneViewType[cSceneViewSize];
 
+typedef struct {
+  float unit_left, unit_right, unit_top, unit_bottom, unit_front, unit_back;
+} SceneUnitContext;
+
+typedef struct {
+  int n_col;
+  int n_row;
+  int first_slot;
+  int last_slot;
+  float asp_adjust;
+  int active;
+  int size;
+  int slot;
+  int mode;
+  GLint cur_view[4];
+  GLint cur_viewport_size[2];
+  SceneUnitContext context;     /* for whole-window display */
+} GridInfo;
 
 /* all information required to define the geometry of a particular view,
    for shipping to and from python as a list of floats
@@ -64,6 +82,7 @@ int SceneInit(PyMOLGlobals * G);
 void SceneDone(PyMOLGlobals * G);
 void SceneUpdate(PyMOLGlobals * G, int force);
 int SceneRenderCached(PyMOLGlobals * G);
+int SceneSetFog(PyMOLGlobals *G, float *fog);
 void SceneRender(PyMOLGlobals * G, Picking * pick, int x, int y,
                  Multipick * smp, int oversize_width, int oversize_height,
                  int click_side, int force_copy);
@@ -88,6 +107,8 @@ float SceneGetScreenVertexScale(PyMOLGlobals * G, float *v1);
 void SceneTest(PyMOLGlobals * G);
 void SceneIdle(PyMOLGlobals * G);
 void SceneFree(PyMOLGlobals * G);
+
+int SceneGetDrawFlagGrid(PyMOLGlobals * G, GridInfo * grid, int slot);
 void SceneRay(PyMOLGlobals * G, int width, int height, int mode,
               char **headerVLA, char **charVLA,
               float angle, float shift, int quiet,
@@ -123,9 +144,16 @@ void SceneRotateScaled(PyMOLGlobals * G, float rx, float ry, float rz, int sdof_
 
 void SceneClip(PyMOLGlobals * G, int plane, float movement, char *sele, int state);
 void SceneGetImageSize(PyMOLGlobals * G, int *width, int *height);
-
+void SceneGetImageSizeFast(PyMOLGlobals * G, int *width, int *height);
+void SceneGetImageSizeFastAdjustForGrid(PyMOLGlobals * G, int *width, int *height);
 void SceneScale(PyMOLGlobals * G, float scale);
+void SceneResetNormalCGO(PyMOLGlobals * G, CGO *cgo, int lines);
 void SceneResetNormal(PyMOLGlobals * G, int lines);
+void SceneResetNormalUseShader(PyMOLGlobals * G, int lines, short use_shader);
+void SceneResetNormalUseShaderAttribute(PyMOLGlobals * G, int lines, short use_shader, int attr);
+#ifdef _PYMOL_CGO_DRAWBUFFERS
+void SceneGetResetNormal(PyMOLGlobals * G, float *normal, int lines);
+#endif
 
 int SceneObjectAdd(PyMOLGlobals * G, CObject * obj);
 int SceneObjectDel(PyMOLGlobals * G, CObject * obj, int allow_purge);
@@ -186,5 +214,24 @@ float SceneGetSpecularValue(PyMOLGlobals * G, float spec, int limit);
 void SceneAbortAnimation(PyMOLGlobals * G);
 void SceneObjectUpdateThread(CObjectUpdateThreadInfo * T);
 int SceneCaptureWindow(PyMOLGlobals * G);
+
+void SceneZoom(PyMOLGlobals * G, float scale);
+
+void SceneUpdateObjectMoleculesSingleThread(PyMOLGlobals * G);
+
+int SceneGetTwoSidedLighting(PyMOLGlobals * G);
+int SceneGetTwoSidedLightingSettings(PyMOLGlobals * G, CSetting *set1, CSetting *set2);
+
+float SceneGetLineWidthForCylinders(PyMOLGlobals * G, RenderInfo * info, float line_width);
+
+void SceneGLClear(PyMOLGlobals * G, GLbitfield mask);
+
+void SceneUpdateAnimation(PyMOLGlobals * G);
+
+void SceneSetupGLPicking(PyMOLGlobals * G);
+
+int SceneDrawImageOverlay(PyMOLGlobals * G  ORTHOCGOARG);
+
+int SceneIsGridModeActive(PyMOLGlobals * G);
 
 #endif

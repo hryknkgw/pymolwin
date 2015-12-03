@@ -14,7 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
-
+#include"os_python.h"
 #include"os_predef.h"
 #include"os_std.h"
 #include"os_gl.h"
@@ -119,9 +119,6 @@ static void SeekerSelectionToggleRange(PyMOLGlobals * G, CSeqRow * rowVLA, int r
         if(logging)
           SelectorLogSele(G, cTempSeekerSele);
 
-#if 0
-        if(!WizardDoSelect(G, cTempSeekerSele))
-#endif
         {
 
           ExecutiveGetActiveSeleName(G, selName, true, logging);
@@ -159,7 +156,7 @@ static void SeekerSelectionToggleRange(PyMOLGlobals * G, CSeqRow * rowVLA, int r
           PLogFlush(G);
         }
 
-        if(SettingGet(G, cSetting_auto_show_selections))
+        if(SettingGetGlobal_b(G, cSetting_auto_show_selections))
           ExecutiveSetObjVisib(G, selName, 1, false);
         SceneInvalidate(G);
       }
@@ -197,9 +194,6 @@ static void SeekerSelectionToggle(PyMOLGlobals * G, CSeqRow * rowVLA, int row_nu
         if(logging)
           SelectorLogSele(G, cTempSeekerSele);
 
-#if 0
-        if(!WizardDoSelect(G, cTempSeekerSele))
-#endif
         {
 
           ExecutiveGetActiveSeleName(G, selName, true, logging);
@@ -245,7 +239,7 @@ static void SeekerSelectionToggle(PyMOLGlobals * G, CSeqRow * rowVLA, int row_nu
           PLogFlush(G);
         }
 
-        if(SettingGet(G, cSetting_auto_show_selections))
+        if(SettingGetGlobal_b(G, cSetting_auto_show_selections))
           ExecutiveSetObjVisib(G, selName, 1, false);
         SceneInvalidate(G);
       }
@@ -349,7 +343,7 @@ static CSeqRow *SeekerClick(PyMOLGlobals * G, CSeqRow * rowVLA, int button, int 
         char name[WordLength];
         if(ExecutiveGetActiveSeleName(G, name, false, false)) {
           SelectorCreate(G, name, "none", NULL, true, NULL);
-          if(SettingGet(G, cSetting_logging)) {
+          if(SettingGetGlobal_i(G, cSetting_logging)) {
             sprintf(buf2, "cmd.select('%s','none', enable=1)", name);
             PLog(G, buf2, cPLog_no_flush);
           }
@@ -1191,9 +1185,7 @@ void SeekerUpdate(PyMOLGlobals * G)
   /* FIRST PASS: get all the residues represented properly */
   label_mode = SettingGetGlobal_i(G, cSetting_seq_view_label_mode);
 
-#if 1
   align_sele = ExecutiveGetActiveAlignmentSele(G);
-#endif
 
   while(ExecutiveIterateObjectMolecule(G, &obj, &hidden)) {
     if(obj->Obj.Enabled && (SettingGet_b(G, obj->Obj.Setting, NULL, cSetting_seq_view)) &&
@@ -1739,36 +1731,6 @@ void SeekerUpdate(PyMOLGlobals * G)
         int hint_tagged_no_space = true;
         done_flag = true;
         {
-#if 0
-          if(all_spacers) {
-            /* this column is only spacers, so line them up like normal */
-            int max_width = 0;
-            int width;
-            int space_added = false;
-            int rep;
-            for(rep = 0; rep < 2; rep++)
-              for(a = 0; a < nRow; a++) {
-                row = row_vla + a;
-                if((!row->label_flag) && (row->cCol < row->nCol)) {
-                  CSeqCol *r1 = row->col + row->cCol;
-                  if((!first) && (!space_added) &&
-                     (codes || (((!r1->is_abbr) && (!r1->spacer))) ||
-                      (r1->is_abbr && (!r1->hint_no_space)))) {
-                    current++;
-                    space_added = true;
-                  }
-                  done_flag = false;
-                  first = false;
-                  r1->offset = current;
-                  width = (r1->stop - r1->start);
-                  if(max_width < width)
-                    max_width = width;
-                  row->cCol++;
-                }
-              }
-            current += max_width;
-          }
-#endif
           {
             /* insert untagged entries into their own columns */
             int untagged_flag = true;

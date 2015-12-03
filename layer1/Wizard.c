@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -717,48 +718,91 @@ static int WizardRelease(Block * block, int button, int x, int y, int mod)
 }
 
 static void draw_button(int x2, int y2, int w, int h, float *light, float *dark,
-                        float *inside)
+                        float *inside ORTHOCGOARG)
 {
-  glColor3fv(light);
-  glBegin(GL_POLYGON);
-  glVertex2i(x2, y2);
-  glVertex2i(x2, y2 + h);
-  glVertex2i(x2 + w, y2 + h);
-  glVertex2i(x2 + w, y2);
-  glEnd();
+    if (orthoCGO){
+      CGOColorv(orthoCGO, light);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, x2, y2, 0.f);
+      CGOVertex(orthoCGO, x2, y2 + h, 0.f);
+      CGOVertex(orthoCGO, x2 + w, y2, 0.f);
+      CGOVertex(orthoCGO, x2 + w, y2 + h, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3fv(light);
+      glBegin(GL_POLYGON);
+      glVertex2i(x2, y2);
+      glVertex2i(x2, y2 + h);
+      glVertex2i(x2 + w, y2 + h);
+      glVertex2i(x2 + w, y2);
+      glEnd();
+    }
 
-  glColor3fv(dark);
-  glBegin(GL_POLYGON);
-  glVertex2i(x2 + 1, y2);
-  glVertex2i(x2 + 1, y2 + h - 1);
-  glVertex2i(x2 + w, y2 + h - 1);
-  glVertex2i(x2 + w, y2);
-  glEnd();
+    if (orthoCGO){
+      CGOColorv(orthoCGO, dark);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, x2 + 1, y2, 0.f);
+      CGOVertex(orthoCGO, x2 + 1, y2 + h - 1, 0.f);
+      CGOVertex(orthoCGO, x2 + w, y2, 0.f);
+      CGOVertex(orthoCGO, x2 + w, y2 + h - 1, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3fv(dark);
+      glBegin(GL_POLYGON);
+      glVertex2i(x2 + 1, y2);
+      glVertex2i(x2 + 1, y2 + h - 1);
+      glVertex2i(x2 + w, y2 + h - 1);
+      glVertex2i(x2 + w, y2);
+      glEnd();
+    }
 
   if(inside) {
-    glColor3fv(inside);
-    glBegin(GL_POLYGON);
-    glVertex2i(x2 + 1, y2 + 1);
-    glVertex2i(x2 + 1, y2 + h - 1);
-    glVertex2i(x2 + w - 1, y2 + h - 1);
-    glVertex2i(x2 + w - 1, y2 + 1);
-    glEnd();
+    if (orthoCGO){
+      CGOColorv(orthoCGO, inside);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, x2 + 1, y2 + 1, 0.f);
+      CGOVertex(orthoCGO, x2 + 1, y2 + h - 1, 0.f);
+      CGOVertex(orthoCGO, x2 + w - 1, y2 + 1, 0.f);
+      CGOVertex(orthoCGO, x2 + w - 1, y2 + h - 1, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3fv(inside);
+      glBegin(GL_POLYGON);
+      glVertex2i(x2 + 1, y2 + 1);
+      glVertex2i(x2 + 1, y2 + h - 1);
+      glVertex2i(x2 + w - 1, y2 + h - 1);
+      glVertex2i(x2 + w - 1, y2 + 1);
+      glEnd();
+    }
   } else {                      /* rainbow */
-    glBegin(GL_POLYGON);
-    glColor3f(1.0F, 0.1F, 0.1F);
-    glVertex2i(x2 + 1, y2 + 1);
-    glColor3f(0.1F, 1.0F, 0.1F);
-    glVertex2i(x2 + 1, y2 + h - 1);
-    glColor3f(1.0F, 1.0F, 0.1F);
-    glVertex2i(x2 + w - 1, y2 + h - 1);
-    glColor3f(0.1F, 0.1F, 1.0F);
-    glVertex2i(x2 + w - 1, y2 + 1);
-    glEnd();
+    if (orthoCGO){
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOColor(orthoCGO, 0.1F, 1.0F, 0.1F); // green
+      CGOVertex(orthoCGO, x2 + 1, y2 + h - 1, 0.f);
+      CGOColor(orthoCGO, 1.0F, 1.0F, 0.1F);  // yellow
+      CGOVertex(orthoCGO, x2 + w - 1, y2 + h - 1, 0.f);
+      CGOColor(orthoCGO, 1.f, 0.1f, 0.1f); // red
+      CGOVertex(orthoCGO, x2 + 1, y2 + 1, 0.f);
+      CGOColor(orthoCGO, 0.1F, 0.1F, 1.0F);  // blue
+      CGOVertex(orthoCGO, x2 + w - 1, y2 + 1, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glBegin(GL_POLYGON);
+      glColor3f(1.0F, 0.1F, 0.1F);
+      glVertex2i(x2 + 1, y2 + 1);
+      glColor3f(0.1F, 1.0F, 0.1F);
+      glVertex2i(x2 + 1, y2 + h - 1);
+      glColor3f(1.0F, 1.0F, 0.1F);
+      glVertex2i(x2 + w - 1, y2 + h - 1);
+      glColor3f(0.1F, 0.1F, 1.0F);
+      glVertex2i(x2 + w - 1, y2 + 1);
+      glEnd();
+    }
   }
 
 }
 
-static void draw_text(PyMOLGlobals * G, char *c, int xx, int yy, float *color)
+static void draw_text(PyMOLGlobals * G, char *c, int xx, int yy, float *color ORTHOCGOARG)
 {
   TextSetColor(G, color);
   while(*c) {
@@ -776,14 +820,14 @@ static void draw_text(PyMOLGlobals * G, char *c, int xx, int yy, float *color)
             }
           }
     TextSetPos2i(G, xx, yy);
-    TextDrawChar(G, *(c++));
+    TextDrawChar(G, *(c++) ORTHOCGOARGVAR);
     xx = xx + 8;
   }
 }
 
 
 /*========================================================================*/
-static void WizardDraw(Block * block)
+static void WizardDraw(Block * block ORTHOCGOARG)
 {
   PyMOLGlobals *G = block->G;
 
@@ -814,18 +858,26 @@ static void WizardDraw(Block * block)
   if(G->HaveGUI && G->ValidContext && ((block->rect.right - block->rect.left) > 6)) {
 
     if(SettingGetGlobal_b(G, cSetting_internal_gui_mode) == 0) {
+    if (orthoCGO)
+      CGOColorv(orthoCGO, I->Block->BackColor);
+    else
       glColor3fv(I->Block->BackColor);
-      BlockFill(I->Block);
-      BlockDrawLeftEdge(I->Block);
+      BlockFill(I->Block ORTHOCGOARGVAR);
+      BlockDrawLeftEdge(I->Block ORTHOCGOARGVAR);
     } else {
-      BlockDrawLeftEdge(I->Block);
+      BlockDrawLeftEdge(I->Block ORTHOCGOARGVAR);
+    if (orthoCGO)
+      CGOColor(orthoCGO, .5f, .5f, .5f);
+    else
       glColor3f(0.5, 0.5, 0.5);
       BlockDrawTopEdge(I->Block);
       text_color2 = OrthoGetOverlayColor(G);
     }
 
-    glColor3fv(I->Block->TextColor);
-
+    if (orthoCGO)
+      CGOColorv(orthoCGO, I->Block->TextColor);
+    else
+      glColor3fv(I->Block->TextColor);
     x = I->Block->rect.left + cWizardLeftMargin;
     y = (I->Block->rect.top - LineHeight) - cWizardTopMargin;
 
@@ -833,7 +885,7 @@ static void WizardDraw(Block * block)
       if(I->Pressed == a) {
         draw_button(I->Block->rect.left + 1, y,
                     (I->Block->rect.right - I->Block->rect.left) - 1,
-                    LineHeight - 1, dimLightEdge, dimDarkEdge, buttonActiveColor);
+                    LineHeight - 1, dimLightEdge, dimDarkEdge, buttonActiveColor ORTHOCGOARGVAR);
         /*        glColor3f(0.0,0.0,0.0); */
         text_color = black_color;
       } else {
@@ -845,7 +897,7 @@ static void WizardDraw(Block * block)
         case cWizTypeButton:
           draw_button(I->Block->rect.left + 1, y,
                       (I->Block->rect.right - I->Block->rect.left) - 1,
-                      LineHeight - 1, dimLightEdge, dimDarkEdge, dimColor);
+                      LineHeight - 1, dimLightEdge, dimDarkEdge, dimColor ORTHOCGOARGVAR);
 
           /*          glColor3fv(buttonTextColor); */
           text_color = buttonTextColor;
@@ -853,7 +905,7 @@ static void WizardDraw(Block * block)
         case cWizTypePopUp:
           draw_button(I->Block->rect.left + 1, y,
                       (I->Block->rect.right - I->Block->rect.left) - 1,
-                      LineHeight - 1, menuLightEdge, menuDarkEdge, menuBGColor);
+                      LineHeight - 1, menuLightEdge, menuDarkEdge, menuBGColor ORTHOCGOARGVAR);
           /* glColor3fv(menuColor); */
           text_color = menuColor;
           break;
@@ -861,7 +913,7 @@ static void WizardDraw(Block * block)
           break;
         }
       }
-      draw_text(G, I->Line[a].text, x + 1, y + text_lift, text_color);
+      draw_text(G, I->Line[a].text, x + 1, y + text_lift, text_color ORTHOCGOARGVAR);
       /*GrapDrawStr(I->Line[a].text,x+1,y+text_lift); */
       y -= LineHeight;
     }

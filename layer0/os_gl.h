@@ -1,25 +1,25 @@
-
-
-/* 
-A* -------------------------------------------------------------------
-B* This file contains source code for the PyMOL computer program
-C* Copyright (c) Schrodinger, LLC. 
-D* -------------------------------------------------------------------
-E* It is unlawful to modify or remove this copyright notice.
-F* -------------------------------------------------------------------
-G* Please see the accompanying LICENSE file for further information. 
-H* -------------------------------------------------------------------
-I* Additional authors of this source file include:
--* 
--* 
--*
-Z* -------------------------------------------------------------------
-*/
 #ifndef _H_os_gl
 #define _H_os_gl
 
-#include"os_predef.h"
-#include"os_proprietary.h"
+#include"os_gl_pre.h"
+
+#if defined(WIN32) || defined(_PYMOL_LIB)
+#define ALLOCATE_ARRAY(tname,variablename, size) tname *variablename = malloc(size * sizeof(tname));
+#else
+#define ALLOCATE_ARRAY(tname,variablename, size) tname *variablename = malloc(size * sizeof(tname)); assert(variablename);
+#endif
+#define DEALLOCATE_ARRAY(variablename) free(variablename);
+
+#if defined(OPENGL_ES_2)
+#define GL_LABEL_SCREEN_SHADER  0xfff0
+#define GL_LABEL_SHADER  0xfffa
+#define GL_BACKGROUND_SHADER  0xfffb
+#define GL_DEFAULT_SHADER_SCREEN  0xfffc
+#define GL_DEFAULT_SHADER  0xfffd
+#define GL_SHADER_LIGHTING 0xfffe
+#define GL_SCREEN_SHADER  0xfff1
+#define GL_RAMP_SHADER  0xfff2
+#endif
 
 #ifndef _PYMOL_OSX
 
@@ -35,32 +35,28 @@ Z* -------------------------------------------------------------------
 #include<GL/gl.h>
 #include<GL/glu.h>
 #endif
+#define GLDOUBLEMULTMATRIX glMultMatrixd
+#define GLDOUBLETRANSLATE glTranslated
 
 #else
 
-
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
-#ifdef _MACPYMOL_XCODE
+
 #include<GL/glew.h>
 #include <OpenGL/gl.h>
 #include <OpenGL/glu.h>
 #include <OpenGL/glext.h>
-#else
-#include<GL/glew.h>
-#include<gl.h>
-#include<glu.h>
-#include<glext.h>
-
-#ifndef GL_TEXTURE_RECTANGLE_EXT
-#define GL_TEXTURE_RECTANGLE_EXT 0x84F5
-#endif
-
-#endif
-
+#define GLDOUBLEMULTMATRIX glMultMatrixd
+#define GLDOUBLETRANSLATE glTranslated
 
 /* END PROPRIETARY CODE SEGMENT */
 #endif
 
+#ifdef _PYMOL_GL_DRAWARRAYS
+#define GLLIGHTMODELI glLightModelf
+#else
+#define GLLIGHTMODELI glLightModeli
+#endif
 
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
 #ifdef WIN32
@@ -337,5 +333,33 @@ void p_glutMainLoop(void);
 #endif
 
 #endif
+
+
+#define DEFINE_RENDER_DATA(vartype, var, ...) const vartype var[] = { __VA_ARGS__ }; 
+
+#if defined(_PYMOL_GL_DRAWARRAYS)
+
+#define CHANGE_COLOR3fv(colarr)  glColor3fv(white);
+#define RENDER_DEFINED_DATA(mode, size, type, len, var) \
+	glEnableClientState(GL_VERTEX_ARRAY);   \
+	glVertexPointer(size, type, 0, var);    \
+	glDrawArrays(mode, 0, len); \
+	glDisableClientState(GL_VERTEX_ARRAY);
+#else
+#define CHANGE_COLOR3fv(colarr)  glColor3fv(white);
+#define RENDER_DEFINED_DATA(mode, size, type, len, var) \
+	glBegin(mode); \
+	{ \
+		int i, maxi = len*size; \
+		for (i=0;i<maxi;i+=size){ \
+		  glVertex2i(var[i], var[i+1]);	\
+		} \
+	} \
+	glEnd();
+#endif
+
+#define GL_C_INT_TYPE uint
+#define GL_C_INT_ENUM GL_UNSIGNED_INT
+#define SceneGLClearColor(red,green,blue,alpha) glClearColor(red,green,blue,alpha);
 
 #endif

@@ -2,6 +2,455 @@
 CHANGE LOG
 =========================================================================
 
+2013-06-11 Blaine Bell <blaine.bell@schrodinger.com>
+
+	* Open Source PyMOL v1.6.0.0
+
+	* freeing VBOs properly when deleting volumes
+
+	* added quiet flag for SettingGenerateSideEffects() and SettingCheckUseShaders()
+
+	* fix 15bit color picking
+
+	* fix surface memory leak
+
+	* fix CGO demo
+
+2013-06-10 Thomas Holder <thomas.holder@schrodinger.com>
+
+	* internal.file_read: use urllib2 instead of urllib
+
+	* fix ellipsoid transparency OpenGL rendering
+
+2013-05-27 Thomas Holder, Blaine Bell
+
+	* fix surface normals
+
+	* fix Scripts ending with ...pymol.py do not execute
+	  https://sourceforge.net/p/pymol/bugs/46/
+
+	* several CGO fixes
+
+	* several python fixes
+
+2013-04-26 Thomas Holder <thomas.holder@schrodinger.com>
+
+	* refactored importing.fetch
+
+	* spectrum enhancements (arbitrary expressions and colors)
+
+	* pymol2.cmd2: implement proxy pattern
+
+	* chempy model improvements
+
+	* fix bg_color, which sometimes did not apply instantly
+
+2013-04-17 Thomas Holder <thomas.holder@schrodinger.com>
+
+	* support full path for "matrix" argument
+	  https://sourceforge.net/p/pymol/patches/4/
+
+	* use PyMOL API in pymol.rpc module
+	  https://sourceforge.net/p/pymol/patches/3/
+
+	* doc string for cmd.find_pairs
+	  https://sourceforge.net/p/pymol/patches/2/
+
+2013-04-12 Blaine Bell <blaine.bell@schrodinger.com>, Thomas Holder <thomas.holder@schrodinger.com>
+
+	* rotate ANISOU vector when transforming objects
+
+	* new command: split_chains
+
+	* fix create/extract bug with movie
+
+	* fixed cartoon VBO memory leak
+
+	* always draw rounded caps with sticks shaders
+
+	* several shader fixes and performance improvements
+
+	* fixed screen z-offset for labels
+
+2013-03-22 Blaine Bell <blaine.bell@schrodinger.com>, Thomas Holder <thomas.holder@schrodinger.com>
+
+	* improved rendering performance using shaders, including
+	  dynamically updated shaders based on settings
+	  (see data/shaders directory)
+
+	* implemented shaders for menus, labels, selection indicators,
+	  background, and other graphics that were not using shaders.
+
+	* consolidated textures used for labels and selection indicators
+	  to one texture, which helps performance
+
+	* added memory checking to help avoid crashing when memory is
+	  low or not available
+
+	* cleaned up code base, took out extraneous preprocessor code and
+	  code that was not used.
+
+	* refactor pmg_tk.Settings
+
+	* Do not clear atom names with chempy.champ.assign.amber99
+
+	* fix some plugin manager exception handling
+
+	* fix create with name=None
+
+	* Plugin override search path: Always include "startup"
+	  from installation directory in plugin search path
+
+	* Movie > Program > Scene Loop > Nutate > by degrees
+
+	* ObjectMeshRenderImpl refactoring: color isomesh and isodot with
+	  mesh_color and dot_color settings
+
+	* merging alignment objects: eliminate orphaned atoms
+
+	* fix cealign alignment object creation: rms_cur arguments swapped
+
+	* improved the alignto command to take additional keyword arguments
+	  which get passed to the used method -> object=aln supported now
+
+	* remove _PYMOL_MODULE constant
+
+	* fix LITERAL mode command parsing: ignore leading whitespace
+
+2013-02-14 Thomas Holder <thomas.holder@schrodinger.com>
+
+	* enable VMD plugins by default
+
+	* apply patch #120 "pymol" import in launcher ambiguous
+	  http://sourceforge.net/p/pymol/bugs/120/
+
+	* always import _cmd from pymol or pymol.cmd instead of relative
+
+	* add bz2 support for reading PDB and some other file formats
+
+	* support width/height units with the png command
+
+	* support decorator syntax for cmd.extend
+
+	* setup.py refactoring, setup2.py no longer needed
+
+2013-01-10 Thomas Holder <thomas.holder@schrodinger.com>
+
+	* Exit on error with "-y" flag
+
+	* shortcut and auto-completion refactoring
+
+	* fix setting angle_color or dihedral_color
+
+	* ramp_new: exception handling on argument parsing
+
+2012-12-07 Thomas Holder <thomas.holder@schrodinger.com>
+
+	* feedback fixes
+
+	* speed up iterate and alter - https://sourceforge.net/p/pymol/patches/5/
+
+	* command line (Tk GUI) history improvements
+
+	* add angles to the Movie-Program-SceneLoop menu
+
+	* Fixed fab hydro argument
+
+2012-11-12 Thomas Holder <thomas.holder@schrodinger.com>
+
+	* Fixed #3539436: right justified resn in PDB
+
+	* Fixed #3506103: alignment objects from "super" do not contain N atoms
+
+	* Fixed #3496006: END before ENDMDL bug reintroduced
+
+2012-08-15 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed longstanding annoyance: 'as rep, vis' now works
+
+2012-08-14 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Added autocomplete for 'group' command.
+
+2012-08-14 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Adding autocomplete for 'dss'.
+
+2012-08-14 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed bug where FASTA strings aren't returned for multiple objects.
+
+2012-06-06 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+	* Fixing up CEAlign (thanks to Thomas Holder)
+
+	* FIXED: fails to align chains of length < 2*window+1
+    
+	* FIXED: if chain length is a multiple of window, only (length-window) residues get aligned
+
+	* FIXED: only evaluates every 2nd path of the best 20 (increments k twice in the loop)
+
+	* FIXED: if no alignment is found, the return value is NULL which raises a SystemError instead of a graceful error message.
+
+	* FIXED: finally, it's not possible to obtain the alignment as an object (like with align ..., object=aln)
+
+	* FIXED: fixed auto complete names on for cealign
+
+2012-05-30 Blaine Bell <Blaine.Bell@schrodinger.com>
+
+	* Fixing the exception handling of get_names_of_type
+
+2012-05-30 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixing get_unused_names
+
+	* Fixing locking on get_names_of_type
+
+2012-04-06 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Adding checks for Quadro cards to enable cylinder shader workaround.
+
+2012-04-06 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Improved PyMOL Plugin System; Thomas Holder's PyMOL OSFP project
+
+2012-04-06 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Standard splash
+
+2012-04-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Default all Intel cards to not use shaders
+
+	* Fixed ID:3513708, cmd.get_unused_name fix; thanks to Thomas Holder
+
+	* Added new splash image for open-source build
+
+2012-03-20 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed ID: 3512313 TER records before residues like MSE, patch submitted by Thomas Holder
+
+2012-03-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed crash when reading in long lines from stdin
+
+2012-03-03 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* updating version 1.5.0.2 -> 1.5.0.3
+
+	* fixed error showing Cell on map with attached file
+
+	* fixed reading in symmetry
+
+	* fixed problem with symmetry copying/setting where map doesn't get updated
+
+	* get_symmetry should return None if argument is not an ObjectMolecule or ObjectMap
+
+	* stack trace when hiding everything for mesh
+
+	* fixed Volume extents only get shown when volume is rendered
+
+	* fixed copying Symmetry info into Objects (ObjectMap and ObjectMolecule)
+
+	* fixed reading in legacy sessions with version # less than 1
+
+2012-02-17 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fink/Macport builds fixed; thanks to Jack Howarth for the patch.
+
+2012-02-17 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Open Source PyMOL v1.5.0.2
+	* stack trace when saving movie as MPEG (ID: 3488608)
+	* error loading from pse that don't have Crystal/Symmetry info 
+	  (ID: 3488609)
+
+2012-02-13 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* adding necessary files to build PyMOL v1.5.0.1
+
+2012-02-13 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Open Source PyMOL v1.5.0.1
+
+	* improved rendering Performance
+
+	* improved rendering Quality
+
+	* bg_gradient now ray traces
+
+	* improved cartoon support for non-standard nucleotides
+
+	* surface color smoothing
+
+	* surface-based picking
+
+	* frame buffer-based antialiasing for real-time rendering
+
+	* optimized anaglyph colors and intensities for an improved 3D
+	viewing experience
+
+	* real-time and ray-traceable ambient occlusion
+
+	* molecular weight calculuations; A > Compute > Molceular Weight
+
+	* selection generation A > Generate > Selection
+
+	* new mouse mode for repositioning lights
+
+	* many bug fixes
+
+2012-01-03 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* improved callback rendering
+
+	* improved cealign (thanks to Thomas Holder)
+
+2011-12-16 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed object creation when merging two objects; thanks to James
+	Davidson for pointing out the error
+
+2011-12-06 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed get_mass
+
+2011-12-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed create to reorder IDs when combining objects; thanks to James
+	Davidson.
+
+2011-12-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Cleaned up 'fitting.py' (untabified)
+
+	* alignto updated; can now take a method for alignment
+
+	* cealign updated; made faster and cleaner; thanks to Thomas
+	Holder for the ideas and patch
+
+2011-10-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Added the get_viewport function and updated the viewport function
+
+2011-10-05 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Added support for some non-standard nucleic acids (PSU)
+
+2011-09-29 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed distance invalidation problem
+
+2011-09-19 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Added Display > Roving Detail
+
+	* Removed AttributeError on coloring volumes; needs better
+	solution though
+
+	* Added polar contacts/hydrogen bonds to the Measurement wizard
+
+2011-09-19 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Doc fix
+
+2011-09-16 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* PyMOL now respects the h_bond_from_proton setting
+
+2011-09-08 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Added A > Generate > Selection > polar, non_polar,
+	acceptor/donator options
+
+2011-08-21 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+        * Fixed click-flash that happens when middle-clicking when
+          showing the background gradient (thanks, Blaine)
+
+        * Added A > Compute > Molecular Weight and cleaned up the
+          compute menu in general
+
+2011-08-15 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed a conversion bug in util.cbc; thanks Hongbo.
+
+2011-07-26 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* one more fread
+
+2011-07-26 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixing bugs introduced by last commit for freads; and fixed another importing bug
+
+2011-07-25 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixing more warnings; opengl bindings work again; thanks to Jack
+	Haworth for the patch
+
+2011-07-20 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Fixed lots of warnings on build; cleaning up code
+
+2011-07-06 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Multi-model PDBs now write ENDMDL after models and END at end of file; thanks to Thomas Holder for the patch. 
+
+2011-06-23 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Code cleaning; reducing number of warnings
+
+2011-06-22 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* Small state bugfix
+
+	* Feedback bugfix
+
+	* Updated TNT to 3.0b
+
+2011-06-16 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* suppress guess valences warning message to Blather
+
+2011-06-09 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed volume shader; esp for Ubuntu
+
+2011-06-08 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* "fix" for colored sticks problem
+
+	* fixed File > Save Molecule using object's state
+
+	* fog/shading in shaders
+
+2011-05-18 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* bugfix for drawing ribbons, drastically increases their rendering (3x+)
+
+2011-05-18 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed a bug where group names were clipped
+
+2011-05-18 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed state bug in distances for (all)
+
+	* fixed ray trace bug when not using Python
+
+	* fixed nucleic acid residue naming (Thanks to Thomas Holder)
+
+2011-05-12 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* more robust space group/pt group reading from maps
+
+2011-05-02 Jason Vertrees <Jason.Vertrees@schrodinger.com>
+
+	* fixed state bug in distances for (all)
+
+	* fixed ray trace bug when not using Python
+
+	* fixed nucleic acid residue naming (Thanks to Thomas Holder)
+
 2011-05-02 Jason Vertrees <Jason.Vertrees@schrodinger.com>
 
 	* fixed shader bug

@@ -14,9 +14,9 @@
    -*
    Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include "os_predef.h"
-#include "os_python.h"
 
 
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
@@ -31,10 +31,8 @@
 #include "os_std.h"
 #include "os_gl.h"
 
-#ifdef _PYMOL_MODULE
 #ifdef _DRI_WORKAROUND
 #include <dlfcn.h>
-#endif
 #endif
 
 #include "PyMOLGlobals.h"
@@ -53,7 +51,7 @@
 #include "Util.h"
 #include "Control.h"
 #include "Movie.h"
-#include "Shader.h"
+
 #ifdef _PYMOL_NO_MAIN
 
 int MainSavingUnderWhileIdle(void)
@@ -235,13 +233,6 @@ PyObject *MainComplete(char *str)
 
 
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
-#if 0
-I think this code is dead ...
-#ifdef _PYMOL_OSX
-int *MacPyMOLReady = NULL;
-CPyMOLOptions *MacPyMOLOption = NULL;
-#endif
-#endif
 
 /* END PROPRIETARY CODE SEGMENT */
 
@@ -355,11 +346,39 @@ static void DrawBlueLine(PyMOLGlobals * G)
 
       /* draw sync lines */
       glColor3d(0.0f, 0.0f, 0.0f);
+#ifdef _PYMOL_GL_DRAWARRAYS
+      {
+	const GLfloat lineVerts[] = {
+	  0.0F, window_height - 0.5F, 0.0F,
+	  (float) window_width, window_height - 0.5F, 0.0F
+	};
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glVertexPointer(3, GL_FLOAT, 0, lineVerts);
+	glDrawArrays(GL_LINES, 0, 2);
+	glDisableClientState(GL_VERTEX_ARRAY);
+      }
+#else
       glBegin(GL_LINES);        /* Draw a background line */
       glVertex3f(0.0F, window_height - 0.5F, 0.0F);
       glVertex3f((float) window_width, window_height - 0.5F, 0.0F);
       glEnd();
+#endif
       glColor3d(0.0f, 0.0f, 1.0f);
+#ifdef _PYMOL_GL_DRAWARRAYS
+      {
+	GLfloat lineVerts[] = {
+	  0.0f, window_height - 0.5f, 0.0f,
+	  window_width * 0.80f, window_height - 0.5f, 0.0f
+	};
+	if(buffer == GL_BACK_LEFT){
+	  lineVerts[3] = window_width * 0.30f;
+	}
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glVertexPointer(3, GL_FLOAT, 0, lineVerts);
+	glDrawArrays(GL_LINES, 0, 2);
+	glDisableClientState(GL_VERTEX_ARRAY);
+      }
+#else
       glBegin(GL_LINES);        /* Draw a line of the correct length (the cross
                                    over is about 40% across the screen from the left */
       glVertex3f(0.0f, window_height - 0.5f, 0.0f);
@@ -368,6 +387,7 @@ static void DrawBlueLine(PyMOLGlobals * G)
       else
         glVertex3f(window_width * 0.80f, window_height - 0.5f, 0.0f);
       glEnd();
+#endif
 
       glPopMatrix();
       glMatrixMode(GL_PROJECTION);
@@ -382,164 +402,6 @@ static void DrawBlueLine(PyMOLGlobals * G)
 
 
 /* BEGIN PROPRIETARY CODE SEGMENT (see disclaimer in "os_proprietary.h") */
-#if 0
-I think this code is dead ...
-#ifdef _PYMOL_OSX
-
-/* SPECIAL HOOKS FOR MacPyMOL */
-int MainCheckRedundantOpen(char *file)
-{
-  int result = false;
-#ifndef _PYMOL_NOPY
-  PBlock(G);
-  result = PTruthCallStr(G->P_inst->cmd_do, "check_redundant_open", file);
-  PUnblock(G);
-#endif
-  return result;
-}
-
-void MainMovieCopyPrepare(int *width, int *height, int *length)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-  if(PLockAPIAsGlut(true)) {
-    MovieCopyPrepare(G, width, height, length);
-    PUnlockAPIAsGlut(G);
-  }
-}
-
-int MainMovieCopyFrame(int frame, int width, int height, int rowbytes, void *ptr)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-  int result = false;
-  if(PLockAPIAsGlut(G, true)) {
-    result = MovieCopyFrame(G, frame, width, height, rowbytes, ptr);
-    PUnlockAPIAsGlut(G);
-  }
-  return result;
-}
-
-void MainMovieCopyFinish(void)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-  if(PLockAPIAsGlut(G, true)) {
-    MovieCopyFinish(G);
-    PUnlockAPIAsGlut(G);
-  }
-}
-
-void MainSceneGetSize(int *width, int *height)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-  if(PLockAPIAsGlut(G, true)) {
-    SceneGetWidthHeight(G, width, height);
-    PUnlockAPIAsGlut(G);
-  }
-}
-
-int MainSceneCopy(int width, int height, int rowbytes, void *ptr)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-
-  int result = false;
-  if(PLockAPIAsGlut(G, true)) {
-    result = SceneCopyExternal(G, width, height, rowbytes, (unsigned char *) ptr, 0);
-    PUnlockAPIAsGlut(G);
-  }
-  return result;
-}
-
-void MainDoCommand(char *str1)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-
-  if(PLockAPIAsGlut(G, true)) {
-    if(str1[0] != '_') {        /* suppress internal call-backs */
-      if(strncmp(str1, "cmd._", 5)) {
-        OrthoAddOutput(G, "PyMOL>");
-        OrthoAddOutput(G, str1);
-        OrthoNewLine(G, NULL, true);
-      }
-      PDo(str1);
-    } else if(str1[1] == ' ') { /* "_ command" suppresses echoing of command, but it is still logged */
-      PDo(str1 + 2);
-    } else {
-      PDo(str1);
-    }
-    PUnlockAPIAsGlut(G);
-  }
-}
-
-void MainRunCommand(char *str1)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-
-  if(PLockAPIAsGlut(G, true)) {
-
-    if(str1[0] != '_') {        /* suppress internal call-backs */
-      if(strncmp(str1, "cmd._", 5)) {
-        OrthoAddOutput(G, "PyMOL>");
-        OrthoAddOutput(G, str1);
-        OrthoNewLine(G, NULL, true);
-        if(WordMatch(G, str1, "quit", true) == 0)       /* don't log quit */
-          PLog(G, str1, cPLog_pml);
-      }
-      PParse(G, str1);
-    } else if(str1[1] == ' ') { /* "_ command" suppresses echoing of command, but it is still logged */
-      if(WordMatch(G, str1 + 2, "quit", true) >= 0)     /* don't log quit */
-        PLog(G, str1 + 2, cPLog_pml);
-      PParse(G, str1 + 2);
-    } else {
-      PParse(G, str1);
-    }
-    PUnlockAPIAsGlut(G);
-  }
-}
-
-void MainFlushAsync(void)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-  if(PLockAPIAsGlut(G, true)) {
-    PFlush(G);
-    PUnlockAPIAsGlut(G);
-  }
-}
-
-void MainFlush(void)
-{                               /* assumes GIL held */
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-
-  MainPushValidContext(G);
-
-  PFlush(G);
-
-  MainPopValidContext(G);
-
-}
-
-void MainRunString(char *str)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-  PBlock(G);
-  PLockStatus(G);
-  MainPushValidContext(G);
-  PRunStringModule(G, str);
-  MainPopValidContext(G);
-  PUnlockStatus(G);
-  PUnblock(G);
-}
-
-PyObject *MainGetStringResult(char *str)
-{
-  PyMOLGlobals *G = SingletonPyMOLGlobals;
-  PyObject *result;
-  MainPushValidContext(G);
-  result = PyRun_String(str, Py_eval_input, G->P_inst->dict, G->P_inst->dict);
-  MainPopValidContext(G);
-  return (result);
-}
-#endif
-
-#endif
 
 /* END PROPRIETARY CODE SEGMENT */
 
@@ -808,7 +670,7 @@ static void MainDrawLocked(void)
   }
 
   if(PyMOL_GetSwap(G->PyMOL, true)) {
-    if(!(int) SettingGet(G, cSetting_suspend_updates))
+    if(!SettingGetGlobal_b(G, cSetting_suspend_updates))
       if(G->HaveGUI) {
         DrawBlueLine(G);
         p_glutSwapBuffers();
@@ -885,6 +747,20 @@ static void MainDrawProgress(PyMOLGlobals * G)
         }
 
         glColor3fv(black);
+#ifdef _PYMOL_GL_DRAWARRAYS
+	{
+	  const GLint polyVerts[] = {
+	    0, ViewPort[3],
+	    cBusyWidth, ViewPort[3],
+	    0, ViewPort[3] - cBusyHeight,
+	    cBusyWidth, ViewPort[3] - cBusyHeight
+	  };
+	  glEnableClientState(GL_VERTEX_ARRAY);
+	  glVertexPointer(2, GL_INT, 0, polyVerts);
+	  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	  glDisableClientState(GL_VERTEX_ARRAY);
+	}
+#else
         glBegin(GL_POLYGON);
         glVertex2i(0, ViewPort[3]);
         glVertex2i(cBusyWidth, ViewPort[3]);
@@ -892,7 +768,7 @@ static void MainDrawProgress(PyMOLGlobals * G)
         glVertex2i(0, ViewPort[3] - cBusyHeight);
         glVertex2i(0, ViewPort[3]);     /* needed on old buggy Mesa */
         glEnd();
-
+#endif
         y = ViewPort[3] - cBusyMargin;
 
         glColor3fv(white);
@@ -910,7 +786,20 @@ static void MainDrawProgress(PyMOLGlobals * G)
         for(offset = 0; offset < PYMOL_PROGRESS_SIZE; offset += 2) {
 
           if(progress[offset + 1]) {
-
+#ifdef _PYMOL_GL_DRAWARRAYS
+	    {
+	      const GLint polyVerts[] = {
+		cBusyMargin, y,
+		cBusyWidth - cBusyMargin, y,
+		cBusyWidth - cBusyMargin, y - cBusyBar,
+		cBusyMargin, y - cBusyBar
+	      };
+	      glEnableClientState(GL_VERTEX_ARRAY);
+	      glVertexPointer(2, GL_INT, 0, polyVerts);
+	      glDrawArrays(GL_LINE_LOOP, 0, 4);
+	      glDisableClientState(GL_VERTEX_ARRAY);
+	    }
+#else
             glBegin(GL_LINE_LOOP);
             glVertex2i(cBusyMargin, y);
             glVertex2i(cBusyWidth - cBusyMargin, y);
@@ -918,17 +807,33 @@ static void MainDrawProgress(PyMOLGlobals * G)
             glVertex2i(cBusyMargin, y - cBusyBar);
             glVertex2i(cBusyMargin, y); /* needed on old buggy Mesa */
             glEnd();
+#endif
             glColor3fv(white);
-            glBegin(GL_POLYGON);
-            glVertex2i(cBusyMargin, y);
             x =
               (progress[offset] * (cBusyWidth - 2 * cBusyMargin) / progress[offset + 1]) +
               cBusyMargin;
+#ifdef _PYMOL_GL_DRAWARRAYS
+	    {
+	      const GLint polyVerts[] = {
+		cBusyMargin, y,
+		x, y,
+		cBusyMargin, y - cBusyBar,
+		x, y - cBusyBar
+	      };
+	      glEnableClientState(GL_VERTEX_ARRAY);
+	      glVertexPointer(2, GL_INT, 0, polyVerts);
+	      glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	      glDisableClientState(GL_VERTEX_ARRAY);
+	    }
+#else
+            glBegin(GL_POLYGON);
+            glVertex2i(cBusyMargin, y);
             glVertex2i(x, y);
             glVertex2i(x, y - cBusyBar);
             glVertex2i(cBusyMargin, y - cBusyBar);
             glVertex2i(cBusyMargin, y); /* needed on old buggy Mesa */
             glEnd();
+#endif
             y -= cBusySpacing;
           }
         }
@@ -1161,7 +1066,7 @@ void MainDoReshape(int width, int height)
 
     if(height < 0) {
       BlockGetSize(SceneGetBlock(G), &w, &height);
-      internal_feedback = (int) SettingGet(G, cSetting_internal_feedback);
+      internal_feedback = SettingGetGlobal_i(G, cSetting_internal_feedback);
       if(internal_feedback)
         height += (internal_feedback - 1) * cOrthoLineHeight + cOrthoBottomSceneMargin;
       if(SettingGetGlobal_b(G, cSetting_seq_view)
@@ -1192,7 +1097,7 @@ void MainDoReshape(int width, int height)
 
       /* do we need to become full-screen? */
 
-      if(SettingGet(G, cSetting_full_screen) && G->HaveGUI && G->ValidContext) {
+      if(SettingGetGlobal_b(G, cSetting_full_screen) && G->HaveGUI && G->ValidContext) {
 #ifndef __APPLE__
         p_glutFullScreen();
 #else
@@ -1344,23 +1249,6 @@ static void MainBusyIdle(void)
   PRINTFD(G, FB_Main)
     " MainBusyIdle: called.\n" ENDFD;
 
-#if 0
-#ifdef  _PYMOL_SHARP3D
-  /* keep the window on even coordinates to preserve L/R stereo... */
-  {
-    int x, y;
-    x = glutGet(P_GLUT_WINDOW_X);
-    if(x != Sharp3DLastWindowX) {
-      Sharp3DLastWindowX = x;
-      if(x & 0x1) {
-        y = glutGet(P_GLUT_WINDOW_Y);
-        glutPositionWindow(x - 1, y);
-      }
-    }
-  }
-#endif
-#endif
-
   /* flush command and output queues */
 
   /*  PRINTFD(G,FB_Main)
@@ -1437,16 +1325,16 @@ static void MainBusyIdle(void)
 
     switch (I->IdleMode) {
     case 2:                    /* avoid racing the CPU */
-      if((UtilGetSeconds(G) - I->IdleTime) > (SettingGet(G, cSetting_idle_delay) / 5.0)) {
+      if((UtilGetSeconds(G) - I->IdleTime) > (SettingGetGlobal_f(G, cSetting_idle_delay) / 5.0)) {
         I->IdleMode = 3;
         I->IdleTime = UtilGetSeconds(G);
       }
       break;
     case 3:
-      if((UtilGetSeconds(G) - I->IdleTime) > (SettingGet(G, cSetting_idle_delay))) {
+      if((UtilGetSeconds(G) - I->IdleTime) > (SettingGetGlobal_f(G, cSetting_idle_delay))) {
         I->IdleMode = 4;
         if(G->HaveGUI)
-          if(SettingGet(G, cSetting_cache_display)) {
+          if(SettingGetGlobal_b(G, cSetting_cache_display)) {
             p_glutPostRedisplay();      /* trigger caching of the current scene */
           }
         break;
@@ -1899,9 +1787,14 @@ static void launch(CPyMOLOptions * options, int own_the_options)
 
 /*========================================================================*/
 
-#ifndef _PYMOL_MODULE
-int main(int argc, char *argv[])
+static int is_shared = 1;
+static int main_common(void);
+static int decoy_input_hook(void) { return 0; }
+
+int main_exec(int argc, char **argv)
 {
+  is_shared = 0;
+
   PyMOLGlobals *G = SingletonPyMOLGlobals;
   myArgc = argc;
   myArgv = argv;
@@ -1909,9 +1802,17 @@ int main(int argc, char *argv[])
   fflush(stdout);
   PSetupEmbedded(G, argc, argv);
 
-#else
-int was_main(void)
+  return main_common();
+}
+
+int main_shared(int block_input_hook)
 {
+  if(!is_shared)
+    return 0;
+
+  if(block_input_hook)
+    PyOS_InputHook = decoy_input_hook;
+
   myArgc = 1;
   strcpy(myArgvvv, "pymol");
   myArgvv[0] = myArgvvv;
@@ -1921,8 +1822,11 @@ int was_main(void)
   dlopen("libGL.so.1", RTLD_LAZY | RTLD_GLOBAL);
 #endif
 
-#endif
+  return main_common();
+}
 
+static int main_common(void)
+{
   {                             /* no matter how PyMOL was built, we always come through here... */
 
     CPyMOLOptions *options = PyMOLOptions_New();

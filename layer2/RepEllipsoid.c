@@ -14,6 +14,7 @@
    -*
    Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -30,7 +31,7 @@
 
 typedef struct RepEllipsoid {
   Rep R;                        /* must be first! */
-  CGO *ray, *std;
+  CGO *ray, *std, *shaderCGO;
 } RepEllipsoid;
 
 #include"ObjectMolecule.h"
@@ -43,6 +44,8 @@ void RepEllipsoidFree(RepEllipsoid * I)
     CGOFree(I->ray);
   if(I->std)
     CGOFree(I->std);
+  if(I->shaderCGO)
+    CGOFree(I->shaderCGO);
   RepPurge(&I->R);
   OOFreeP(I);
 }
@@ -51,15 +54,32 @@ static void RepEllipsoidRender(RepEllipsoid * I, RenderInfo * info)
 {
   CRay *ray = info->ray;
   Picking **pick = info->pick;
+  int ok = true;
+
   register PyMOLGlobals *G = I->R.G;
   if(ray) {
+    int try_std = false;
     PRINTFD(G, FB_RepEllipsoid)
       " RepEllipsoidRender: rendering ray...\n" ENDFD;
 
-    if(I->ray)
-      CGORenderRay(I->ray, ray, NULL, I->R.cs->Setting, I->R.obj->Setting);
-    else if(I->std)
-      CGORenderRay(I->std, ray, NULL, I->R.cs->Setting, I->R.obj->Setting);
+    if(I->ray){
+      int rayok = CGORenderRay(I->ray, ray, NULL, I->R.cs->Setting, I->R.obj->Setting);
+      if (!rayok){
+	CGOFree(I->ray);
+	I->ray = NULL;
+	try_std = true;
+      }
+    } else {
+      try_std = true;
+    }
+    if(try_std && I->std){
+      ok &= CGORenderRay(I->std, ray, NULL, I->R.cs->Setting, I->R.obj->Setting);
+      if (!ok){
+	CGOFree(I->std);
+	I->std = NULL;
+      }
+    }
+    CHECKOK(ok, I->std);
   } else if(G->HaveGUI && G->ValidContext) {
 
     if(pick) {
@@ -69,7 +89,11 @@ static void RepEllipsoidRender(RepEllipsoid * I, RenderInfo * info)
       }
     } else {
       int use_dlst;
-      use_dlst = (int) SettingGet(G, cSetting_use_display_lists);
+      int use_shaders;
+      use_shaders = SettingGetGlobal_b(G, cSetting_use_shaders);
+      
+      use_dlst = SettingGetGlobal_i(G, cSetting_use_display_lists);
+#ifdef _PYMOL_GL_CALLLISTS
       if(use_dlst && I->R.displayList) {
         glCallList(I->R.displayList);
       } else {
@@ -82,16 +106,34 @@ static void RepEllipsoidRender(RepEllipsoid * I, RenderInfo * info)
             }
           }
         }
-
+#endif
         PRINTFD(G, FB_RepEllipsoid)
           " RepEllipsoidRender: rendering GL...\n" ENDFD;
-        if(I->std)
-          CGORenderGL(I->std, NULL, I->R.cs->Setting, I->R.obj->Setting, info);
 
+	if (use_shaders){
+	  if (!I->shaderCGO){
+	    CGO *convertcgo = NULL;
+	    convertcgo = CGOCombineBeginEnd(I->std, 0);	    
+	    I->shaderCGO = CGOOptimizeToVBONotIndexed(convertcgo, 0);
+	    I->shaderCGO->use_shader = true;
+	    I->shaderCGO->enable_shaders = true;
+	    CGOFree(convertcgo);
+	  }
+	} else if (I->shaderCGO){
+	  CGOFree(I->shaderCGO);	  
+	  I->shaderCGO = NULL;
+	}
+	if (I->shaderCGO){
+          CGORenderGL(I->shaderCGO, NULL, I->R.cs->Setting, I->R.obj->Setting, info, &I->R);
+	} else if(I->std){
+          CGORenderGL(I->std, NULL, I->R.cs->Setting, I->R.obj->Setting, info, &I->R);
+	}
+#ifdef _PYMOL_GL_CALLLISTS
         if(use_dlst && I->R.displayList) {
           glEndList();
         }
       }
+#endif
     }
   }
 }
@@ -112,8 +154,12 @@ Rep *RepEllipsoidNew(CoordSet * cs, int state)
 {
   PyMOLGlobals *G = cs->State.G;
   ObjectMolecule *obj;
+  int ok = true;
 
   OOCalloc(G, RepEllipsoid);    /* allocates & sets I */
+  CHECKOK(ok, I);
+  if (!ok)
+    return NULL;
 
   obj = cs->Obj;
 
@@ -180,12 +226,15 @@ Rep *RepEllipsoidNew(CoordSet * cs, int state)
     }
 
     I->ray = CGONew(G);         /* describe the ellipsoids analytically */
-
+    CHECKOK(ok, I->ray);
     if(I->ray) {
       int a, a1;
       int vis_flag;
       AtomInfoType *ai;
       float last_alpha = 1.0F;
+
+      double *csmatrix = SettingGet_i(G, cs->Setting, obj->Obj.Setting,
+            cSetting_matrix_mode) > 0 ? NULL : cs->State.Matrix;
 
       for(a = 0; a < cs->NIndex; a++) {
         a1 = cs->IdxToAtm[a];
@@ -273,6 +322,9 @@ Rep *RepEllipsoidNew(CoordSet * cs, int state)
               else
                 c1 = at_ellipsoid_color;
 
+              if(csmatrix)
+                left_multiply44d44d(csmatrix, e_vec);
+
               n0[0] = e_vec[0];
               n0[1] = e_vec[4];
               n0[2] = e_vec[8];
@@ -310,30 +362,37 @@ Rep *RepEllipsoidNew(CoordSet * cs, int state)
                 float vc[3];
                 if(ColorCheckRamped(G, c1)) {
                   ColorGetRamped(G, c1, v, vc, state);
-                  CGOColorv(I->ray, vc);
+                  ok &= CGOColorv(I->ray, vc);
                 } else {
-                  CGOColorv(I->ray, ColorGet(G, c1));
+                  ok &= CGOColorv(I->ray, ColorGet(G, c1));
                 }
               }
 
-              {
+              if (ok) {
                 float alpha = 1.0F - at_transp;
                 if(alpha != last_alpha) {
-                  CGOAlpha(I->ray, alpha);
+                  ok &= CGOAlpha(I->ray, alpha);
                   last_alpha = alpha;
                 }
               }
-              if(pickable && (!ai->masked))
-                CGOPickColor(I->ray, a1, cPickableAtom);
+              if(ok && pickable && (!ai->masked))
+                ok &= CGOPickColor(I->ray, a1, cPickableAtom);
 
-              CGOEllipsoid(I->ray, v, r_el, n0, n1, n2);
+              if (ok)
+		ok &= CGOEllipsoid(I->ray, v, r_el, n0, n1, n2);
             }
           }
         }
       }
-      CGOStop(I->ray);
+      if (ok)
+	ok &= CGOStop(I->ray);
       I->std = CGOSimplify(I->ray, 0);  /* convert analytical to discrete */
+      CHECKOK(ok, I->std);
     }
+  }
+  if (!ok){
+    RepEllipsoidFree(I);
+    I = NULL;
   }
   return ((void *) (struct Rep *) I);
 }

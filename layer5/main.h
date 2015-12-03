@@ -76,10 +76,9 @@ int MainSceneCopy(int width, int height, int rowbytes, void *ptr);
 
 #define PYMOL_MAX_OPT_STR  1025
 
-#ifdef _PYMOL_MODULE
-int was_main(void);
-#endif
+int main_exec(int, char **);
+int main_shared(int);
 
 #endif
 
-#endif
+#endif /* _H_main header */

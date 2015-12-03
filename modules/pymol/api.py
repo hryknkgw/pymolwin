@@ -36,6 +36,7 @@ from creating import \
       isolevel,           \
       isomesh,            \
       isosurface,         \
+      map_generate,        \
       map_new,            \
       pseudoatom,         \
       slice_new,          \
@@ -48,6 +49,7 @@ from creating import \
 #--------------------------------------------------------------------
 import commanding
 from commanding import \
+      async,           \
       cls,                \
       delete,             \
       do,                 \
@@ -180,6 +182,7 @@ from editing import \
       map_trim,           \
       matrix_copy,        \
       matrix_reset,       \
+      mse2met,            \
       protect,            \
       push_undo,          \
       reference,          \
@@ -202,7 +205,9 @@ from editing import \
       set_title,          \
       smooth,             \
       sort,               \
+      split_chains,       \
       split_states,       \
+      symmetry_copy,      \
       torsion,            \
       transform_object,   \
       transform_selection,\
@@ -319,6 +324,7 @@ from viewing import \
       full_screen,        \
       get_colorection,    \
       get_view,           \
+      get_viewport,       \
       get_vis,            \
       get_scene_dict,     \
       get_scene_list,     \
@@ -361,6 +367,7 @@ import setting
 from setting import \
       set,                 \
       set_bond,            \
+      get_bond,            \
       get,                 \
       unset,               \
       unset_bond,          \

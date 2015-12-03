@@ -14,6 +14,8 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
+
 #include"os_predef.h"
 #include"os_std.h"
 
@@ -85,17 +87,6 @@ int ObjectDistMoveLabel(ObjectDist * I, int state, int index, float *v, int mode
     ds->fInvalidateRep(ds, cRepLabel, cRepInvCoord);
     /*      ExecutiveUpdateCoordDepends(I->Obj.G,I); */
   }
-#if 0
-  if(log) {
-    OrthoLineType line, buffer;
-    if(SettingGet(I->Obj.G, cSetting_logging)) {
-      ObjectMoleculeGetAtomSele(I, index, buffer);
-      sprintf(line, "cmd.translate_atom(\"%s\",%15.9f,%15.9f,%15.9f,%d,%d,%d)\n",
-              buffer, v[0], v[1], v[2], state + 1, mode, 0);
-      PLog(G, line, cPLog_no_flush);
-    }
-  }
-#endif
   return (result);
 }
 
@@ -387,15 +378,6 @@ PyObject *ObjectDistAsPyList(ObjectDist * I)
   PyList_SetItem(result, 2, ObjectDistDSetAsPyList(I));
   PyList_SetItem(result, 3, PyInt_FromLong(I->CurDSet));
 
-#if 0
-
-  CObject Obj;
-  struct DistSet **DSet;
-  int NDSet;
-  int CurDSet;
-
-#endif
-
   return (PConvAutoNone(result));
 #endif
 }
@@ -524,6 +506,29 @@ static CSetting **ObjectDistGetSettingHandle(ObjectDist * I, int state)
   }
 }
 
+void ObjectDistInvalidate(CObject * Iarg, int rep, int level, int state){
+  int a;
+  ObjectDist * I = (ObjectDist*)Iarg;
+  if(state < 0) {
+    for(a = 0; a < I->NDSet; a++)
+      if(I->DSet[a])
+	if(I->DSet[a]->fInvalidateRep)
+	  I->DSet[a]->fInvalidateRep(I->DSet[a], rep, level);
+  } else if(state < I->NDSet) {
+    /* if a specific state to render */
+    I->CurDSet = state % I->NDSet;
+    if(I->DSet[I->CurDSet]) {
+      if(I->DSet[I->CurDSet]->fInvalidateRep)
+	I->DSet[I->CurDSet]->fInvalidateRep(I->DSet[I->CurDSet], rep, level);
+    }
+  } else if(I->NDSet == 1) {  /* if only one coordinate set, assume static */
+    if(I->DSet[0]->fInvalidateRep) {
+      if(SettingGet_b(I->Obj.G, I->Obj.Setting, NULL, cSetting_static_singletons)) {
+	I->DSet[0]->fInvalidateRep(I->DSet[0], rep, level);
+      }
+    }
+  }
+}
 
 /*========================================================================*/
 ObjectDist *ObjectDistNew(PyMOLGlobals * G)
@@ -536,6 +541,7 @@ ObjectDist *ObjectDistNew(PyMOLGlobals * G)
   I->Obj.fRender = (void (*)(CObject *, RenderInfo * info)) ObjectDistRender;
   I->Obj.fFree = (void (*)(CObject *)) ObjectDistFree;
   I->Obj.fUpdate = (void (*)(CObject *)) ObjectDistUpdate;
+  I->Obj.fInvalidate = (void (*)(CObject *, int, int, int)) ObjectDistInvalidate;
   I->Obj.fGetNFrame = (int (*)(CObject *)) ObjectDistGetNFrames;
   I->Obj.fGetSettingHandle = (CSetting ** (*)(CObject *, int state))
     ObjectDistGetSettingHandle;
@@ -570,11 +576,11 @@ ObjectDist *ObjectDistNewFromSele(PyMOLGlobals * G, ObjectDist * oldObj,
   int a, mn;
   float dist_sum = 0.0, dist;
   int dist_cnt = 0;
-  int n_state1, n_state2, state1, state2;
+  int n_state1, n_state2, state1 = 0, state2 = 0;
   int frozen1 = -1, frozen2 = -1;
   ObjectDist *I;
   
-  CObject * query_obj;
+  CObject * query_obj = NULL;
 
   /* if the distance name we presented exists and is an object, just
    * overwrite it by resetting it; otherwise intialize the
@@ -605,15 +611,23 @@ ObjectDist *ObjectDistNewFromSele(PyMOLGlobals * G, ObjectDist * oldObj,
     query_obj = (CObject*) SelectorGetSingleObjectMolecule(G, sele1);
   if(query_obj) {
     frozen1 = SettingGetIfDefined_i(query_obj->G, query_obj->Setting, cSetting_state, &state1);
-    state1--;
+    if(frozen1) {
+      state1--;
+    }
   }
 
   if(sele2 >= 0)
     query_obj = (CObject*) SelectorGetSingleObjectMolecule(G, sele2);
   if(query_obj) {
     frozen2 = SettingGetIfDefined_i(query_obj->G, query_obj->Setting, cSetting_state, &state2);
-    state2--;
+    if(frozen2) {
+      state2--;
+    }
   }
+  
+  /* FIX for incorrectly handling state=-1 for multi-molecule selections */
+  if(state1<0) state1=0;
+  if(state2<0) state2=0;
 
   if(mn) {
     /* loop over the max number of states */
@@ -628,10 +642,10 @@ ObjectDist *ObjectDistNewFromSele(PyMOLGlobals * G, ObjectDist * oldObj,
 
       PRINTFB(G, FB_ObjectDist, FB_Blather)
 	" ObjectDistNewFromSele: obj1 is frozen = %d into state %d+1\n", frozen1, state1 
-	ENDFD(G);
+	ENDFB(G);
       PRINTFB(G, FB_ObjectDist, FB_Blather) 
 	" ObjectDistNewFromSele: obj1 is frozen = %d into state %d+1\n", frozen2, state2 
-	ENDFD(G);
+	ENDFB(G);
 
       VLACheck(I->DSet, DistSet *, a);
       if(!frozen1)
@@ -679,8 +693,7 @@ ObjectDist *ObjectDistNewFromAngleSele(PyMOLGlobals * G, ObjectDist * oldObj,
   ObjectDist *I;
 
   int frozen1=-1, frozen2=-1, frozen3=-1;
-  CObject * query_obj;
-
+  CObject * query_obj = NULL;
   if(!oldObj)                   /* create object if new */
     I = ObjectDistNew(G);
   else {                        /* otherwise, use existing object */
@@ -742,15 +755,14 @@ ObjectDist *ObjectDistNewFromAngleSele(PyMOLGlobals * G, ObjectDist * oldObj,
 
       PRINTFB(G, FB_ObjectDist, FB_Blather)
 	" ObjectDistNewFromAngleSele: obj1 is frozen = %d into state %d+1\n", frozen1, state1 
-	ENDFD(G);
+	ENDFD;
       PRINTFB(G, FB_ObjectDist, FB_Blather) 
 	" ObjectDistNewFromAngleSele: obj2 is frozen = %d into state %d+1\n", frozen2, state2 
-	ENDFD(G);
+	ENDFD;
       PRINTFB(G, FB_ObjectDist, FB_Blather) 
 	" ObjectDistNewFromAngleSele: obj3 is frozen = %d into state %d+1\n", frozen3, state3
-	ENDFD(G);
+	ENDFD;
 
-      VLACheck(I->DSet, DistSet *, a);
       if(!frozen1)
 	state1 = (n_state1>1) ? a : 0;
       if(!frozen2)
@@ -758,7 +770,7 @@ ObjectDist *ObjectDistNewFromAngleSele(PyMOLGlobals * G, ObjectDist * oldObj,
       if(!frozen3)
 	state3 = (n_state3>1) ? a : 0;
 
-      VLACheck(I->DSet, DistSet *, a);
+      VLACheck(I->DSet, DistSet *, a+1);
       I->DSet[a] = SelectorGetAngleSet(G, I->DSet[a], sele1, state1, sele2,
                                        state2, sele3, state3, mode, &angle_sum,
                                        &angle_cnt);
@@ -798,7 +810,7 @@ ObjectDist *ObjectDistNewFromDihedralSele(PyMOLGlobals * G, ObjectDist * oldObj,
   ObjectDist *I;
 
   int frozen1=-1, frozen2=-1, frozen3=-1, frozen4=-1;
-  CObject * query_obj;
+  CObject * query_obj = NULL;
 
   if(!oldObj)                   /* create object if new */
     I = ObjectDistNew(G);
@@ -922,7 +934,7 @@ void ObjectDistFree(ObjectDist * I)
         I->DSet[a]->fFree(I->DSet[a]);
       I->DSet[a] = NULL;
     }
-  /*  VLAFreeP(I->DSet); */
+  VLAFreeP(I->DSet);
   ObjectPurge(&I->Obj);
   OOFreeP(I); /* from OOAlloc */
 }

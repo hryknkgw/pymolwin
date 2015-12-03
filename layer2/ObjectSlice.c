@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -73,19 +74,6 @@ static PyObject *ObjectSliceStateAsPyList(ObjectSliceState * I)
   PyList_SetItem(result, 7, PConvFloatArrayToPyList(I->system, 9));
   PyList_SetItem(result, 8, PyFloat_FromDouble(I->MapMean));
   PyList_SetItem(result, 9, PyFloat_FromDouble(I->MapStdev));
-
-#if 0
-  int Active;
-  ObjectNameType MapName;
-  int MapState;
-  float ExtentMin[3];
-  float ExtentMax[3];
-  int ExtentFlag;
-
-  float origin[3];              /* the origin of the plane */
-  float system[9];              /* x, y, and z of the system */
-  float grid;                   /* sampling interval for the map */
-#endif
 
   return (PConvAutoNone(result));
 }
@@ -233,6 +221,7 @@ PyObject *ObjectSliceAsPyList(ObjectSlice * I)
 static void ObjectSliceStateFree(ObjectSliceState * oss)
 {
   if(oss->G->HaveGUI) {
+#ifdef _PYMOL_GL_CALLLISTS
     if(oss->displayList) {
       if(PIsGlutThread()) {
         if(oss->G->ValidContext) {
@@ -246,6 +235,7 @@ static void ObjectSliceStateFree(ObjectSliceState * oss)
         oss->displayList = 0;
       }
     }
+#endif
   }
   VLAFreeP(oss->normals);
   VLAFreeP(oss->colors);
@@ -315,6 +305,7 @@ static void ObjectSliceStateUpdate(ObjectSlice * I, ObjectSliceState * oss,
   int min[2] = { 0, 0 }, max[2] = {
   0, 0};                        /* limits of the rectangle */
   int need_normals = false;
+  int track_camera = SettingGet_b(I->Obj.G, NULL, I->Obj.Setting, cSetting_slice_track_camera);
   float grid = SettingGet_f(I->Obj.G, NULL, I->Obj.Setting, cSetting_slice_grid);
   int min_expand = 1;
 
@@ -322,12 +313,14 @@ static void ObjectSliceStateUpdate(ObjectSlice * I, ObjectSliceState * oss,
     float resol = SettingGet_f(I->Obj.G, NULL, I->Obj.Setting,
                                cSetting_slice_dynamic_grid_resolution);
     float scale = SceneGetScreenVertexScale(I->Obj.G, oss->origin);
-
     oss->last_scale = scale;
     grid = resol * scale;
-
   }
-
+  CGOFree(oss->shaderCGO);
+  oss->shaderCGO = NULL;
+  if (track_camera){
+    oss->outline_n_points = 0;
+  }
   if(grid < 0.01F)
     grid = 0.01F;
 
@@ -538,11 +531,9 @@ static void ObjectSliceStateUpdate(ObjectSlice * I, ObjectSliceState * oss,
     int offset = 0, offset00, offset01, offset10, offset11;
     int strip_active = false;
     int n = 0;
-
     for(y = min[1]; y < max[1]; y++) {
       offset00 = offset;
       for(x = min[0]; x < max[0]; x++) {
-
         offset01 = offset00 + 1;
         offset10 = offset00 + cols;
         offset11 = offset10 + 1;
@@ -553,7 +544,6 @@ static void ObjectSliceStateUpdate(ObjectSlice * I, ObjectSliceState * oss,
         flag11 = oss->flags[offset11];
 
         /* first triangle - forward handedness: 10 00 11 */
-
         if(strip_active) {
           if(flag10 && flag00 && flag11) {
             /* continue current strip */
@@ -565,7 +555,7 @@ static void ObjectSliceStateUpdate(ObjectSlice * I, ObjectSliceState * oss,
             /* terminate current strip */
 
             VLACheck(oss->strips, int, n);
-            oss->strips[n] = -2;
+            oss->strips[n] = STOP_STRIP;
             strip_active = false;
             n++;
           }
@@ -592,7 +582,7 @@ static void ObjectSliceStateUpdate(ObjectSlice * I, ObjectSliceState * oss,
           } else {
             /* terminate current strip */
             VLACheck(oss->strips, int, n);
-            oss->strips[n] = -2;
+            oss->strips[n] = STOP_STRIP;
             strip_active = false;
             n++;
           }
@@ -612,7 +602,7 @@ static void ObjectSliceStateUpdate(ObjectSlice * I, ObjectSliceState * oss,
       if(strip_active) {
         /* terminate current strip */
         VLACheck(oss->strips, int, n);
-        oss->strips[n] = -2;
+        oss->strips[n] = STOP_STRIP;
         strip_active = false;
         n++;
       }
@@ -853,6 +843,7 @@ int ObjectSliceGetVertex(ObjectSlice * I, int index, int base, float *v)
   return (result);
 }
 
+/*
 int ObjectSliceGetOrigin(ObjectSlice * I, int state, float *origin)
 {
   int ok = false;
@@ -866,12 +857,12 @@ int ObjectSliceGetOrigin(ObjectSlice * I, int state, float *origin)
         oss = I->State + state;
 
   while(1) {
-    if(state < 0) {             /* all_states */
+    if(state < 0) {             // all_states
       oss = I->State + cur_state;
     } else {
       if(!oss) {
         if(I->NState &&
-           ((SettingGet(I->Obj.G, cSetting_static_singletons) && (I->NState == 1))))
+           ((SettingGetGlobal_b(I->Obj.G, cSetting_static_singletons) && (I->NState == 1))))
           oss = I->State;
       }
     }
@@ -888,7 +879,252 @@ int ObjectSliceGetOrigin(ObjectSlice * I, int state, float *origin)
       break;
   }
   return ok;
+}*/
+
+#ifdef _PYMOL_GL_DRAWARRAYS
+void ObjectSliceRenderStripES(int nverts, int *strip, int abegin, int aend, float *vnormal, float *color, float *point, float alpha){
+  ALLOCATE_ARRAY(GLfloat,colorVals,nverts*4)
+  ALLOCATE_ARRAY(GLfloat,normalVals,nverts*3)
+  ALLOCATE_ARRAY(GLfloat,vertexVals,nverts*3)
+  int pl = 0, plc = 0, a, offset;
+  float *tmp_ptr, *col;
+  for (a = abegin; a < aend; a++){
+    offset = *(strip++);
+    switch(offset){
+    case START_STRIP:
+    case STOP_STRIP:
+      break;
+    default:
+      col = color + 3 * offset;
+      if(vnormal){
+	tmp_ptr = vnormal + 3 * offset;
+	normalVals[pl] = tmp_ptr[0]; normalVals[pl+1] = tmp_ptr[1]; 
+	normalVals[pl+2] = tmp_ptr[2]; 
+      }
+      colorVals[plc++] = col[0]; colorVals[plc++] = col[1];
+      colorVals[plc++] = col[2]; colorVals[plc++] = alpha;
+      tmp_ptr = point + 3 * offset;
+      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1];
+      vertexVals[pl++] = tmp_ptr[2];
+    }
+  }
+  glEnableClientState(GL_VERTEX_ARRAY);
+  glEnableClientState(GL_COLOR_ARRAY);
+  if (vnormal){
+    glEnableClientState(GL_NORMAL_ARRAY);
+    glNormalPointer(GL_FLOAT, 0, normalVals);
+  }
+  glVertexPointer(3, GL_FLOAT, 0, vertexVals);
+  glColorPointer(4, GL_FLOAT, 0, colorVals);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, nverts);
+  glDisableClientState(GL_VERTEX_ARRAY);
+  glDisableClientState(GL_COLOR_ARRAY);
+  if (vnormal){
+    glDisableClientState(GL_NORMAL_ARRAY);
+  }
+  DEALLOCATE_ARRAY(colorVals)
+  DEALLOCATE_ARRAY(normalVals)
+  DEALLOCATE_ARRAY(vertexVals)
 }
+void ObjectSliceRenderStripTrianglesES(Picking **pick, Picking *p, int nverts, int *strip, int abegin, int aend, float *point, int iarg){
+  ALLOCATE_ARRAY(GLubyte,colorVals,nverts*3)
+  ALLOCATE_ARRAY(GLfloat,vertexVals,nverts*3)
+  float *tmp_ptr;
+  int pl = 0, plc = 0, a, offset, i = iarg, offset0, offset1, offset2, tri_count, j;
+  for (a = abegin; a < aend; a++){
+    offset = *(strip++);
+    switch(offset){
+    case START_STRIP:
+    case STOP_STRIP:
+      break;
+    default:
+      tri_count++;
+      offset2 = offset1;
+      offset1 = offset0;
+      offset0 = offset;
+      if (tri_count>=3){
+	i++;
+	if(!(*pick)[0].src.bond) {
+	  /* pass 1 - low order bits */
+	  colorVals[plc++] = (uchar) ((i & 0xF) << 4);
+	  colorVals[plc++] = (uchar) ((i & 0xF0) | 0x8);
+	  colorVals[plc++] = (uchar) ((i & 0xF00) >> 4);
+	  VLACheck((*pick), Picking, i);
+	  (*pick)[i] = *p; /* copy object and atom info */
+	} else {
+	  /* pass 2 - high order bits */
+	  j = i >> 12;
+	  colorVals[plc++] = (uchar) ((j & 0xF) << 4);
+	  colorVals[plc++] = (uchar) ((j & 0xF0) | 0x8);
+	  colorVals[plc++] = (uchar) ((j & 0xF00) >> 4);
+	}
+	p->src.bond = offset0 + 1;	
+	colorVals[plc] = colorVals[plc-3]; plc++; colorVals[plc] = colorVals[plc-3]; plc++;
+	colorVals[plc] = colorVals[plc-3]; plc++; colorVals[plc] = colorVals[plc-3]; plc++;
+	colorVals[plc] = colorVals[plc-3]; plc++; colorVals[plc] = colorVals[plc-3]; plc++;
+	if(tri_count & 0x1) {     /* get the handedness right ... */
+	  tmp_ptr = point + 3 * offset0;
+	  vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	  tmp_ptr = point + 3 * offset1;
+	  vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	  tmp_ptr = point + 3 * offset2;
+	  vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	} else {
+	  tmp_ptr = point + 3 * offset1;
+	  vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	  tmp_ptr = point + 3 * offset0;
+	  vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	  tmp_ptr = point + 3 * offset2;
+	  vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	}
+      }
+    }
+  }
+  glEnableClientState(GL_VERTEX_ARRAY);
+  glEnableClientState(GL_COLOR_ARRAY);
+  glVertexPointer(3, GL_FLOAT, 0, vertexVals);
+  glColorPointer(4, GL_FLOAT, 0, colorVals);
+  glDrawArrays(GL_TRIANGLES, 0, nverts);
+  glDisableClientState(GL_VERTEX_ARRAY);
+  glDisableClientState(GL_COLOR_ARRAY);
+  DEALLOCATE_ARRAY(colorVals)
+  DEALLOCATE_ARRAY(vertexVals)
+}
+#endif
+
+int ObjectSliceAddSlicePoint(float *pt0, float *pt1, float *zaxis, float d, 
+			     float *coords, float *origin)
+{
+    
+  float p0[3];
+  float p1[3];
+  float u;
+
+  p0[0] = pt0[0] - origin[0];
+  p0[1] = pt0[1] - origin[1];
+  p0[2] = pt0[2] - origin[2];
+  p1[0] = pt1[0] - origin[0];
+  p1[1] = pt1[1] - origin[1];
+  p1[2] = pt1[2] - origin[2];
+  
+  u = (zaxis[0]*p0[0] + zaxis[1]*p0[1] + zaxis[2]*p0[2] + d) /
+    (zaxis[0]*(p0[0]-p1[0]) + zaxis[1]*(p0[1]-p1[1]) + zaxis[2]*(p0[2]-p1[2]));
+  
+  if (u>=0.0F && u<=1.0F) {
+    coords[0] = pt0[0] + (pt1[0]-pt0[0])*u;
+    coords[1] = pt0[1] + (pt1[1]-pt0[1])*u;
+    coords[2] = pt0[2] + (pt1[2]-pt0[2])*u;
+    return 3;
+  }
+  return 0;
+}
+
+void ObjectSliceDrawSlice(CGO *cgo, float *points, int n_points, float *zaxis)
+{
+  float center[3], v[3], w[3], q[3];
+  float angles[12];
+  float a, c, s;
+  int vertices[12];
+  int i, j;
+
+  if (!n_points) return;
+  
+  // Calculate the polygon center
+  center[0] = center[1] = center[2] = 0.0;
+  
+  for (i=0; i<3*n_points; i+=3) {
+    center[0] += points[i];
+    center[1] += points[i+1];
+    center[2] += points[i+2];
+  }    
+  
+  center[0] /= (float)n_points;
+  center[1] /= (float)n_points;
+  center[2] /= (float)n_points;
+  
+  v[0] = points[0]-center[0];
+  v[1] = points[1]-center[1];
+  v[2] = points[2]-center[2];
+  
+  normalize3f(v);
+  
+  // Sort vertices by rotation angle around the central axis
+  for (i=0; i<n_points; i++) {
+    w[0] = points[3*i]-center[0];
+    w[1] = points[3*i+1]-center[1];
+    w[2] = points[3*i+2]-center[2];
+    normalize3f(w);
+    cross_product3f(v, w, q);
+    c = dot_product3f(v, w);
+    s = dot_product3f(zaxis, q);
+    a = atan2(s, c);
+    if (a < 0.0f) a += 2.0f * M_PI;
+    j = i-1;
+    while (j>=0 && angles[j]>a) {
+      angles[j+1] = angles[j];
+      vertices[j+1] = vertices[j];
+      j--;
+    }
+    angles[j+1] = a;
+    vertices[j+1] = i;
+  }
+  
+  // Now the vertices are sorted so draw the polygon
+  if (cgo){
+    CGOBegin(cgo, GL_LINE_LOOP);
+    for (i=0; i<n_points; i++) {
+      CGOVertexv(cgo, &points[3*vertices[(i)%n_points]]);
+    }
+    CGOEnd(cgo);
+  } else {
+    glBegin(GL_LINE_LOOP);
+    for (i=0; i<n_points; i++) {
+      glVertex3fv(&points[3*vertices[(i)%n_points]]);
+    }
+    glEnd();
+  }
+}
+
+void GenerateOutlineOfSlice(PyMOLGlobals *G, ObjectSliceState *oss, CGO *cgo){
+  int n_points = oss->outline_n_points;
+  float *points = oss->outline_points;
+  float *m = SceneGetMatrix(G);
+  float *zaxis = oss->outline_zaxis, *origin;//, origin[3];
+  float d = 0.f; // not sure what this should be
+  if (!oss->outline_n_points){
+    zaxis[0] = m[2];
+    zaxis[1] = m[6];
+    zaxis[2] = m[10];
+    /*
+    origin[0] = oss->Corner[0] + 0.5*(oss->Corner[21]-oss->Corner[0]);
+    origin[1] = oss->Corner[1] + 0.5*(oss->Corner[22]-oss->Corner[1]);
+    origin[2] = oss->Corner[2] + 0.5*(oss->Corner[23]-oss->Corner[2]);
+    */
+    origin = oss->origin;
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[0],&oss->Corner[3],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[3],&oss->Corner[9],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[9],&oss->Corner[6],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[6],&oss->Corner[0],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[12],&oss->Corner[15],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[15],&oss->Corner[21],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[21],&oss->Corner[18],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[18],&oss->Corner[12],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[0],&oss->Corner[12],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[3],&oss->Corner[15],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[9],&oss->Corner[21],zaxis,d,&points[n_points], origin);
+    n_points += ObjectSliceAddSlicePoint(&oss->Corner[6],&oss->Corner[18],zaxis,d,&points[n_points], origin);
+    oss->outline_n_points = n_points;
+  }
+  if (cgo){
+    CGOColor(cgo, 1.f, 0.f, 0.f );
+    CGOSphere(cgo, origin, 1.f);
+    CGOColor(cgo, 1.f, 1.f, 1.f );
+  } else {
+    glColor3f(1.f,1.f,1.f);
+  }
+  ObjectSliceDrawSlice(cgo, points, n_points/3, zaxis);
+}
+
 
 static void ObjectSliceRender(ObjectSlice * I, RenderInfo * info)
 {
@@ -903,7 +1139,8 @@ static void ObjectSliceRender(ObjectSlice * I, RenderInfo * info)
   int track_camera = SettingGet_b(G, NULL, I->Obj.Setting, cSetting_slice_track_camera);
   int dynamic_grid = SettingGet_b(G, NULL, I->Obj.Setting, cSetting_slice_dynamic_grid);
   ObjectSliceState *oss = NULL;
-
+  int use_shaders = !track_camera && SettingGet_b(G, NULL, I->Obj.Setting, cSetting_use_shaders);
+  
   if(track_camera || dynamic_grid) {
     int update_flag = false;
 
@@ -973,7 +1210,7 @@ static void ObjectSliceRender(ObjectSlice * I, RenderInfo * info)
       oss = I->State + cur_state;
     } else {
       if(!oss) {
-        if(I->NState && ((SettingGet(G, cSetting_static_singletons) && (I->NState == 1))))
+        if(I->NState && ((SettingGetGlobal_b(G, cSetting_static_singletons) && (I->NState == 1))))
           oss = I->State;
       }
     }
@@ -1052,11 +1289,10 @@ static void ObjectSliceRender(ObjectSlice * I, RenderInfo * info)
           ray->fTransparentf(ray, 0.0);
         } else if(G->HaveGUI && G->ValidContext) {
           if(pick) {
-
             int i = (*pick)->src.index;
             int j;
             Picking p;
-
+	    SceneSetupGLPicking(G);
             p.context.object = (void *) I;
             p.context.state = 0;
             p.src.index = state + 1;
@@ -1070,6 +1306,47 @@ static void ObjectSliceRender(ObjectSlice * I, RenderInfo * info)
               int offset0 = 0, offset1 = 0, offset2, offset;
               int strip_active = false;
               int tri_count = 0;
+#ifdef _PYMOL_GL_DRAWARRAYS
+	      int *stripstart = strip, abegin, nverts, iinit ;
+	      {
+		(void) j;
+		for(a = 0; a < n; a++) {
+		  offset = *(strip++);
+		  switch (offset) {
+		  case START_STRIP:
+		    abegin = a;
+		    stripstart = strip;
+		    strip_active = true;
+		    iinit = i;
+		    tri_count = 0;
+		    nverts = 0;
+		    break;
+		  case STOP_STRIP:
+		    if(strip_active){
+		      ObjectSliceRenderStripTrianglesES(pick, &p, nverts, stripstart, abegin, a, point, iinit);
+		    }
+		    strip_active = false;
+		    break;
+		  default:
+		    if(strip_active) {
+		      tri_count++;
+		      offset2 = offset1;
+		      offset1 = offset0;
+		      offset0 = offset;
+		      
+		      if(tri_count >= 3) {
+			nverts += 3;
+			i++;
+		      }
+                    }
+                  }
+                  break;
+                }
+              }
+              if(strip_active) {        /* just in case */
+		ObjectSliceRenderStripTrianglesES(pick, &p, nverts, stripstart, abegin, a, point, iinit);
+              }
+#else
               for(a = 0; a < n; a++) {
                 offset = *(strip++);
                 switch (offset) {
@@ -1127,10 +1404,10 @@ static void ObjectSliceRender(ObjectSlice * I, RenderInfo * info)
               if(strip_active) {        /* just in case */
                 glEnd();
               }
+#endif
             }
             (*pick)[0].src.index = i;   /* pass the count */
-          } else {
-
+          } else {  // !pick
             int render_now = false;
             if(alpha > 0.0001) {
               render_now = (pass == -1);
@@ -1138,86 +1415,187 @@ static void ObjectSliceRender(ObjectSlice * I, RenderInfo * info)
               render_now = (!pass);
 
             if(render_now) {
-
               int use_dlst;
+	      int already_rendered = false;
+	      int generate_shader_cgo = false;
+	      if (use_shaders){
+		if (oss->shaderCGO){
+		  CGORenderGL(oss->shaderCGO, NULL, NULL, I->Obj.Setting, info, NULL);
+		  already_rendered = true;
+		} else {
+		  oss->shaderCGO = CGONew(G);
+		  generate_shader_cgo = true;
+		}
+	      }
 
-              SceneResetNormal(G, false);
-              ObjectUseColor(&I->Obj);
-              use_dlst = (int) SettingGet(G, cSetting_use_display_lists);
-
-              if(use_dlst && oss->displayList && oss->displayListInvalid) {
-                glDeleteLists(oss->displayList, 1);
-                oss->displayList = 0;
-                oss->displayListInvalid = false;
-              }
-
-              if(use_dlst && oss->displayList) {
-                glCallList(oss->displayList);
-              } else {
-
-                if(use_dlst) {
-                  if(!oss->displayList) {
-                    oss->displayList = glGenLists(1);
-                    if(oss->displayList) {
-                      glNewList(oss->displayList, GL_COMPILE_AND_EXECUTE);
-                    }
-                  }
-                }
-
-                if(I->Obj.RepVis[cRepSlice]) {
-                  int *strip = oss->strips;
-                  float *point = oss->points;
-                  float *color = oss->colors;
-                  float *col;
-                  float *vnormal = oss->normals;
-                  int n = oss->n_strips;
-                  int a;
-                  int offset;
-                  int strip_active = false;
-
-                  {
-                    float normal[3];
-                    normal[0] = oss->system[2];
-                    normal[1] = oss->system[5];
-                    normal[2] = oss->system[8];
-                    glNormal3fv(normal);
-                  }
-
-                  for(a = 0; a < n; a++) {
-                    offset = *(strip++);
-                    switch (offset) {
-                    case START_STRIP:
-                      if(!strip_active)
-                        glBegin(GL_TRIANGLE_STRIP);
-                      strip_active = true;
-                      break;
-                    case STOP_STRIP:
-                      if(strip_active)
-                        glEnd();
-                      strip_active = false;
-                      break;
-                    default:
-                      if(strip_active) {
-                        col = color + 3 * offset;
-                        if(vnormal)
-                          glNormal3fv(vnormal + 3 * offset);
-                        glColor4f(col[0], col[1], col[2], alpha);
-                        glVertex3fv(point + 3 * offset);
-                      }
-                      break;
-                    }
-                  }
-                  if(strip_active)      /* just in case */
-                    glEnd();
-                }
-
-              }
-
-              if(use_dlst && oss->displayList) {
-                glEndList();
-              }
-            }
-          }
+	      if (!already_rendered){
+		if (generate_shader_cgo){
+		  SceneResetNormalCGO(G, oss->shaderCGO, false);
+		  /*
+		  CGOColor(oss->shaderCGO, 1.f, 1.f, 1.f);
+		  GenerateOutlineOfSlice(G, oss, oss->shaderCGO);
+		  */
+		  ObjectUseColorCGO(oss->shaderCGO, &I->Obj);
+		} else {
+		  SceneResetNormal(G, false);
+		  /*
+		  glColor3f(1.f, 1.f, 1.f);
+		  GenerateOutlineOfSlice(G, oss, NULL);
+		  */
+		  ObjectUseColor(&I->Obj);
+		}
+		use_dlst = SettingGetGlobal_i(G, cSetting_use_display_lists);
+		
+#ifdef _PYMOL_GL_CALLLISTS
+		if(use_dlst && oss->displayList && oss->displayListInvalid) {
+		  glDeleteLists(oss->displayList, 1);
+		  oss->displayList = 0;
+		  oss->displayListInvalid = false;
+		}
+		if(use_dlst && oss->displayList) {
+		  glCallList(oss->displayList);
+		} else {
+		  if(use_dlst) {
+		    if(!oss->displayList) {
+		      oss->displayList = glGenLists(1);
+		      if(oss->displayList) {
+			glNewList(oss->displayList, GL_COMPILE_AND_EXECUTE);
+		      }
+		    }
+		  }
+#endif
+		  if(I->Obj.RepVis[cRepSlice]) {
+		    int *strip = oss->strips;
+		    float *point = oss->points;
+		    float *color = oss->colors;
+		    float *vnormal = oss->normals;
+		    int n = oss->n_strips;
+		    int a;
+		    int offset;
+		    int strip_active = false;
+		    
+		    {
+		      float normal[3];
+		      normal[0] = oss->system[2];
+		      normal[1] = oss->system[5];
+		      normal[2] = oss->system[8];
+		      
+		      if (generate_shader_cgo){
+			CGONormalv(oss->shaderCGO, normal);
+		      } else {
+			glNormal3fv(normal);
+		      }
+		    }
+		    
+#ifdef _PYMOL_GL_DRAWARRAYS
+		    {
+		      int *stripstart = strip, abegin, nverts ;
+		      for(a = 0; a < n; a++) {
+			offset = *(strip++);
+			switch (offset) {
+			case START_STRIP:
+			  abegin = a;
+			  stripstart = strip;
+			  strip_active = true;
+			  break;
+			case STOP_STRIP:
+			  if(strip_active){
+			    nverts = strip - stripstart;
+			    ObjectSliceRenderStripES(nverts, stripstart, abegin, a, vnormal, color, point, alpha);
+			  }
+			  strip_active = false;
+			  break;
+			default:
+			  break;
+			}
+		      }
+		      if(strip_active){
+			nverts = strip - stripstart;
+			ObjectSliceRenderStripES(nverts, stripstart, abegin, a, vnormal, color, point, alpha);
+		      }
+		    }
+#else
+		    if (generate_shader_cgo){
+		      for(a = 0; a < n; a++) {
+			offset = *(strip++);
+			switch (offset) {
+			case START_STRIP:
+			  if(!strip_active)
+			    CGOBegin(oss->shaderCGO, GL_TRIANGLE_STRIP);
+			  strip_active = true;
+			  break;
+			case STOP_STRIP:
+			  if(strip_active)
+			    CGOEnd(oss->shaderCGO);
+			  strip_active = false;
+			  break;
+			default:
+			  if(strip_active) {
+			    float *col;
+			    col = color + 3 * offset;
+			    if(vnormal)
+			      CGONormalv(oss->shaderCGO, vnormal + 3 * offset);
+			    CGOAlpha(oss->shaderCGO, alpha);
+			    CGOColor(oss->shaderCGO, col[0], col[1], col[2]);
+			    CGOVertexv(oss->shaderCGO, point + 3 * offset);
+			  }
+			  break;
+			}
+		      }
+		      if(strip_active)      /* just in case */
+			CGOEnd(oss->shaderCGO);
+		    } else {
+		      for(a = 0; a < n; a++) {
+			offset = *(strip++);
+			switch (offset) {
+			case START_STRIP:
+			  if(!strip_active)
+			    glBegin(GL_TRIANGLE_STRIP);
+			  strip_active = true;
+			  break;
+			case STOP_STRIP:
+			  if(strip_active)
+			    glEnd();
+			  strip_active = false;
+			  break;
+			default:
+			  if(strip_active) {
+			    float *col;
+			    col = color + 3 * offset;
+			    if(vnormal)
+			      glNormal3fv(vnormal + 3 * offset);
+			    glColor4f(col[0], col[1], col[2], alpha);
+			    glVertex3fv(point + 3 * offset);
+			  }
+			  break;
+			}
+		      }
+		      if(strip_active)      /* just in case */
+			glEnd();
+		    }
+#endif
+		  }
+		}
+		
+		if (generate_shader_cgo){
+		  CGO *convertcgo = oss->shaderCGO;	    
+		  CGOStop(oss->shaderCGO);
+		  convertcgo = CGOCombineBeginEnd(oss->shaderCGO, 0);	    
+		  CGOFree(oss->shaderCGO);
+		  oss->shaderCGO = CGOOptimizeToVBONotIndexed(convertcgo, 0);
+		  oss->shaderCGO->use_shader = true;
+		  oss->shaderCGO->enable_shaders = true;
+		  CGOFree(convertcgo);
+		  CGORenderGL(oss->shaderCGO, NULL, NULL, I->Obj.Setting, info, NULL);
+		}
+#ifdef _PYMOL_GL_CALLLISTS
+		if(use_dlst && oss->displayList) {
+		  glEndList();
+		}
+	      }
+#endif
+	    }
+	  }
         }
       }
     }
@@ -1299,6 +1677,7 @@ void ObjectSliceStateInit(PyMOLGlobals * G, ObjectSliceState * oss)
 
   zero3f(oss->origin);
 
+  oss->shaderCGO = NULL;
 }
 
 
@@ -1353,6 +1732,7 @@ ObjectSlice *ObjectSliceFromMap(PyMOLGlobals * G, ObjectSlice * obj, ObjectMap *
 
     memcpy(oss->ExtentMin, oms->ExtentMin, 3 * sizeof(float));
     memcpy(oss->ExtentMax, oms->ExtentMax, 3 * sizeof(float));
+    memcpy(oss->Corner, oms->Corner, 24 * sizeof(float));
   }
 
   strcpy(oss->MapName, map->Obj.Name);

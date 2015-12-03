@@ -49,6 +49,8 @@ typedef struct {
   float AltLevel;
   /* not stored */
   Isofield *Field;
+  CGO *shaderCGO;
+  CGO *shaderUnitCellCGO;
 } ObjectMeshState;
 
 typedef struct ObjectMesh {
@@ -76,5 +78,6 @@ int ObjectMeshNewFromPyList(PyMOLGlobals * G, PyObject * list, ObjectMesh ** res
 int ObjectMeshSetLevel(ObjectMesh * I, float level, int state, int quiet);
 int ObjectMeshGetLevel(ObjectMesh * I, int state, float *result);
 int ObjectMeshInvalidateMapName(ObjectMesh * I, char *name);
+int ObjectMeshAllMapsInStatesExist(ObjectMesh * I);
 
 #endif

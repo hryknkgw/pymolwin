@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -30,8 +31,7 @@ Z* -------------------------------------------------------------------
 #include"main.h"
 #include"Color.h"
 #include"VFont.h"
-
-static void ObjectCGOFree(ObjectCGO * I);
+#include"ShaderMgr.h"
 
 #ifndef _PYMOL_NOPY
 static PyObject *ObjectCGOStateAsPyList(ObjectCGOState * I)
@@ -39,15 +39,13 @@ static PyObject *ObjectCGOStateAsPyList(ObjectCGOState * I)
 
   PyObject *result = NULL;
 
-  result = PyList_New(2);
-  if(I->std)
+  result = PyList_New(1);
+  if(I->ray)
+    PyList_SetItem(result, 0, CGOAsPyList(I->ray));
+  else if(I->std)
     PyList_SetItem(result, 0, CGOAsPyList(I->std));
   else
     PyList_SetItem(result, 0, PConvAutoNone(NULL));
-  if(I->ray)
-    PyList_SetItem(result, 1, CGOAsPyList(I->ray));
-  else
-    PyList_SetItem(result, 1, PConvAutoNone(NULL));
   return (PConvAutoNone(result));
 
 }
@@ -62,7 +60,6 @@ static PyObject *ObjectCGOAllStatesAsPyList(ObjectCGO * I)
     PyList_SetItem(result, a, ObjectCGOStateAsPyList(I->State + a));
   }
   return (PConvAutoNone(result));
-
 }
 
 static int ObjectCGOStateFromPyList(PyMOLGlobals * G, ObjectCGOState * I, PyObject * list,
@@ -92,6 +89,9 @@ static int ObjectCGOStateFromPyList(PyMOLGlobals * G, ObjectCGOState * I, PyObje
       I->ray = NULL;
     else
       ok = ((I->ray = CGONewFromPyList(G, PyList_GetItem(list, 1), version)) != NULL);
+    if (!I->std && I->ray){
+      I->std = CGOSimplify(I->ray, 0);
+    }
   }
   return (ok);
 }
@@ -172,10 +172,12 @@ PyObject *ObjectCGOAsPyList(ObjectCGO * I)
 
 /*========================================================================*/
 
-static void ObjectCGOFree(ObjectCGO * I)
+void ObjectCGOFree(ObjectCGO * I)
 {
   int a;
   for(a = 0; a < I->NState; a++) {
+    if(I->State[a].shaderCGO && I->State[a].std!=I->State[a].shaderCGO)
+      CGOFree(I->State[a].shaderCGO);
     if(I->State[a].std)
       CGOFree(I->State[a].std);
     if(I->State[a].ray)
@@ -194,9 +196,15 @@ void ObjectCGORecomputeExtent(ObjectCGO * I)
   float mx[3], mn[3];
   int extent_flag = false;
   int a;
-  for(a = 0; a < I->NState; a++)
-    if(I->State[a].std) {
-      if(CGOGetExtent(I->State[a].std, mn, mx)) {
+  int has_normals = 0;
+  CGO *cgo;
+  for(a = 0; a < I->NState; a++){
+    cgo = I->State[a].std;
+    if (!cgo){
+      cgo = I->State[a].shaderCGO;
+    }
+    if(cgo) {
+      if(CGOGetExtent(cgo, mn, mx)) {
         if(!extent_flag) {
           extent_flag = true;
           copy3f(mx, I->Obj.ExtentMax);
@@ -206,22 +214,39 @@ void ObjectCGORecomputeExtent(ObjectCGO * I)
           min3f(mn, I->Obj.ExtentMin, I->Obj.ExtentMin);
         }
       }
+      if (!has_normals && cgo && CGOHasNormals(cgo)){
+	has_normals = 1;
+      }
     }
+  }
   I->Obj.ExtentFlag = extent_flag;
+  SettingCheckHandle(I->Obj.G, &I->Obj.Setting);
+  SettingSet_i(I->Obj.Setting, cSetting_cgo_lighting, has_normals);
 }
 
 
 /*========================================================================*/
 static void ObjectCGOInvalidate(ObjectCGO * I, int rep, int level, int state)
 {
+  ObjectCGOState *sobj = NULL;
   if(state < 0) {
     int a;
     for(a = 0; a < I->NState; a++) {
       I->State[a].valid = false;
+      sobj = I->State + a;
+      if (sobj->shaderCGO){
+	CGOFree(sobj->shaderCGO);	      
+	sobj->shaderCGO = 0;
+      }
     }
   } else {
     if((state >= 0) && (state < I->NState)) {
       I->State[state].valid = false;
+      sobj = I->State + state;
+      if (sobj->shaderCGO){
+	CGOFree(sobj->shaderCGO);	      
+	sobj->shaderCGO = 0;
+      }
     }
   }
 }
@@ -234,6 +259,10 @@ static void ObjectCGOUpdate(ObjectCGO * I)
   int a;
   for(a = 0; a < I->NState; a++) {
     ObjectCGOState *ocs = I->State + a;
+    if (ocs->shaderCGO){
+      CGOFree(ocs->shaderCGO);	      
+      ocs->shaderCGO = 0;
+    }
     if(!ocs->valid) {
       if(ocs->std && ocs->ray) {
         int est = CGOCheckComplex(ocs->ray);
@@ -270,6 +299,11 @@ static void ObjectCGORender(ObjectCGO * I, RenderInfo * info)
   ObjectCGOState *sobj = NULL;
   int a;
   float *color;
+  int use_shader = 0;
+  
+  use_shader = SettingGetGlobal_b(G, cSetting_cgo_use_shader) &
+    SettingGetGlobal_b(G, cSetting_use_shaders) & 
+    !SettingGetGlobal_b(G, cSetting_transparency_global_sort);
 
   ObjectPrepareContext(&I->Obj, ray);
 
@@ -285,38 +319,205 @@ static void ObjectCGORender(ObjectCGO * I, RenderInfo * info)
         if(I->State) {
           for(a = 0; a < I->NState; a++) {
             sobj = I->State + a;
+#ifdef _PYMOL_CGO_DRAWBUFFERS
+	    if (use_shader){
+	      CGO *convertcgo = NULL;
+	      if (!sobj->shaderCGO){
+		float colorWithA[4];
+		if (color){
+		  colorWithA[0] = color[0]; colorWithA[1] = color[1]; colorWithA[2] = color[2];
+		} else {
+		  colorWithA[0] = 1.f; colorWithA[1] = 1.f; colorWithA[2] = 1.f;
+		}
+		colorWithA[3] = 1.f - SettingGet_f(G, I->Obj.Setting, NULL, cSetting_cgo_transparency);
+		{
+		  CGO *convertcgo = NULL;
+		  if(sobj->std && sobj->std->has_begin_end){
+		    convertcgo = CGOCombineBeginEnd(sobj->std, 0);
+		    CGOFree(sobj->std);
+		    sobj->std = convertcgo;
+		  }
+		}
+		if (CGOHasCylinderOperations(sobj->std)){
+		  convertcgo = CGOOptimizeGLSLCylindersToVBOIndexedNoColor(sobj->std, 0);
+		  //		  convertcgo->enable_shaders = true;
+		} else {
+		  convertcgo = CGOOptimizeToVBOIndexedWithColor(sobj->std, 0, colorWithA);
+		}
+		sobj->shaderCGO = convertcgo;
+	      }
+	    } else if (sobj->shaderCGO){
+	      CGOFree(sobj->shaderCGO);	      
+	      sobj->shaderCGO = 0;
+	    }
+#endif
             if(ray) {
-              if(sobj->ray)
-                CGORenderRay(sobj->ray, ray, color, I->Obj.Setting, NULL);
-              else
-                CGORenderRay(sobj->std, ray, color, I->Obj.Setting, NULL);
+	      int try_std = false;
+              if(sobj->ray){
+                int rayok = CGORenderRay(sobj->ray, ray, color, I->Obj.Setting, NULL);
+		if (!rayok){
+		  CGOFree(sobj->ray);
+		  sobj->ray = NULL;
+		  try_std = true;
+		}
+	      } else {
+		try_std = true;
+	      }
+	      if (try_std && sobj->std){
+		int rayok = CGORenderRay(sobj->std, ray, color, I->Obj.Setting, NULL);
+		if (!rayok){
+		  CGOFree(sobj->std);
+		  sobj->std = NULL;
+		}
+	      }
             } else if(G->HaveGUI && G->ValidContext) {
               if(pick) {
               } else {
-                if(sobj->std)
-                  CGORenderGL(sobj->std, color, I->Obj.Setting, NULL, info);
+		CShaderPrg *shaderPrg;
+		int cgo_lighting, two_sided_lighting;
+		cgo_lighting = SettingGet_i(G, I->Obj.Setting, NULL, cSetting_cgo_lighting);
+		two_sided_lighting = SettingGet_i(G, I->Obj.Setting, NULL, cSetting_two_sided_lighting);
+		if (two_sided_lighting<0){
+		  two_sided_lighting = SceneGetTwoSidedLighting(G);
+		}
+		if (use_shader && sobj->shaderCGO){
+		  shaderPrg = CShaderPrg_Enable_DefaultShader(G);
+		  CShaderPrg_SetLightingEnabled(shaderPrg, cgo_lighting);
+		  CShaderPrg_Set1i(shaderPrg, "two_sided_lighting_enabled", two_sided_lighting);
+		  sobj->shaderCGO->use_shader = use_shader;
+		  sobj->shaderCGO->debug = SettingGetGlobal_i(G, cSetting_cgo_debug);
+		  CGORenderGL(sobj->shaderCGO, color, I->Obj.Setting, NULL, info, NULL);
+		  CShaderPrg_Disable(shaderPrg);
+		} else {
+		  sobj->std->use_shader = use_shader;
+		  sobj->std->debug = SettingGetGlobal_i(G, cSetting_cgo_debug);
+		  if (cgo_lighting){
+		    glEnable(GL_LIGHTING);
+		  } else {
+		    glDisable(GL_LIGHTING);
+		  }
+		  if (two_sided_lighting){
+		    GLLIGHTMODELI(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE);
+		  } else {
+		    GLLIGHTMODELI(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
+		  }
+		  sobj->std->use_shader = use_shader;
+		  sobj->std->debug = SettingGetGlobal_i(G, cSetting_cgo_debug);
+		  CGORenderGL(sobj->std, color, I->Obj.Setting, NULL, info, NULL);
+		  if (SceneGetTwoSidedLighting(G)){
+		    glEnable(GL_VERTEX_PROGRAM_TWO_SIDE);
+		  } else {
+		    glDisable(GL_VERTEX_PROGRAM_TWO_SIDE);
+		  }
+          if (!cgo_lighting){
+		    glEnable(GL_LIGHTING);
+		  }
+		}
               }
             }
           }
         }
       } else {
         if(!sobj) {
-          if(I->NState && SettingGet(G, cSetting_static_singletons))
+          if(I->NState && SettingGetGlobal_b(G, cSetting_static_singletons))
             sobj = I->State;
         }
+#ifdef _PYMOL_CGO_DRAWBUFFERS
+	if (use_shader){
+	  if (!sobj->shaderCGO && sobj->std){
+	    float colorWithA[4];
+	    if (color){
+	      colorWithA[0] = color[0]; colorWithA[1] = color[1]; colorWithA[2] = color[2];
+	    } else {
+	      colorWithA[0] = 1.f; colorWithA[1] = 1.f; colorWithA[2] = 1.f;
+	    }
+	    colorWithA[3] = 1.f - SettingGet_f(G, I->Obj.Setting, NULL, cSetting_cgo_transparency);
+	    {
+	      CGO *convertcgo = NULL;
+	      if(sobj->std && sobj->std->has_begin_end){
+		convertcgo = CGOCombineBeginEnd(sobj->std, 0);
+		CGOFree(sobj->std);
+		sobj->std = convertcgo;
+	      }
+	    }
+	    if (CGOHasCylinderOperations(sobj->std)){
+	      sobj->shaderCGO = CGOOptimizeGLSLCylindersToVBOIndexedNoColor(sobj->std, 0);
+	      //	      sobj->shaderCGO->enable_shaders = true;
+	    } else {
+	      sobj->shaderCGO = CGOOptimizeToVBOIndexedWithColor(sobj->std, 0, colorWithA);
+	    }
+	  }
+	} else if (sobj->shaderCGO){
+	  CGOFree(sobj->shaderCGO);	      
+	  sobj->shaderCGO = 0;
+	}
+#endif
         if(ray) {
           if(sobj) {
-            if(sobj->ray)
-              CGORenderRay(sobj->ray, ray, color, I->Obj.Setting, NULL);
-            else if(sobj->std)
-              CGORenderRay(sobj->std, ray, color, I->Obj.Setting, NULL);
+	    int try_std = false;
+            if(sobj->ray){
+              int rayok = CGORenderRay(sobj->ray, ray, color, I->Obj.Setting, NULL);
+	      if (!rayok){
+		CGOFree(sobj->ray);
+		sobj->ray = NULL;
+		try_std = true;
+	      }
+	    } else {
+	      try_std = true;
+	    }
+	    if (try_std && sobj->std){
+              int rayok = CGORenderRay(sobj->std, ray, color, I->Obj.Setting, NULL);
+	      if (!rayok){
+		CGOFree(sobj->std);
+		sobj->std = NULL;
+	      }
+	    }
           }
         } else if(G->HaveGUI && G->ValidContext) {
           if(pick) {
           } else {
             if(sobj)
-              if(sobj->std)
-                CGORenderGL(sobj->std, color, I->Obj.Setting, NULL, info);
+              if(sobj->std){
+		CShaderPrg *shaderPrg;
+		int cgo_lighting, two_sided_lighting;
+		cgo_lighting = SettingGet_i(G, I->Obj.Setting, NULL, cSetting_cgo_lighting);
+		two_sided_lighting = SettingGet_i(G, I->Obj.Setting, NULL, cSetting_two_sided_lighting);
+		if (two_sided_lighting<0){
+		  two_sided_lighting = SceneGetTwoSidedLighting(G);
+		}
+		if (use_shader){
+		  shaderPrg = CShaderPrg_Enable_DefaultShader(G);
+		  if (!shaderPrg) return;
+		  CShaderPrg_SetLightingEnabled(shaderPrg, cgo_lighting);
+		  CShaderPrg_Set1i(shaderPrg, "two_sided_lighting_enabled", two_sided_lighting);
+		  sobj->shaderCGO->use_shader = use_shader;
+		  sobj->shaderCGO->debug = SettingGetGlobal_i(G, cSetting_cgo_debug);
+		  CGORenderGL(sobj->shaderCGO, color, I->Obj.Setting, NULL, info, NULL);
+		  CShaderPrg_Disable(shaderPrg);
+		} else {
+		  sobj->std->use_shader = use_shader;
+		  sobj->std->debug = SettingGetGlobal_i(G, cSetting_cgo_debug);
+		  if (cgo_lighting){
+		    glEnable(GL_LIGHTING);
+		  } else {
+		    glDisable(GL_LIGHTING);
+		  }
+		  if (two_sided_lighting){
+		    glEnable(GL_VERTEX_PROGRAM_TWO_SIDE);
+		  } else {
+		    glDisable(GL_VERTEX_PROGRAM_TWO_SIDE);
+		  }
+		  CGORenderGL(sobj->std, color, I->Obj.Setting, NULL, info, NULL);
+		  if (SceneGetTwoSidedLighting(G)){
+		    glEnable(GL_VERTEX_PROGRAM_TWO_SIDE);
+		  } else {
+		    glDisable(GL_VERTEX_PROGRAM_TWO_SIDE);
+		  }
+		  if (!cgo_lighting){
+		    glEnable(GL_LIGHTING);
+		  }
+		}
+	      }
           }
         }
       }
@@ -334,7 +535,6 @@ ObjectCGO *ObjectCGONew(PyMOLGlobals * G)
 
   I->State = VLAMalloc(10, sizeof(ObjectCGOState), 5, true);
   I->NState = 0;
-
   I->Obj.type = cObjectCGO;
   I->Obj.fFree = (void (*)(CObject *)) ObjectCGOFree;
   I->Obj.fUpdate = (void (*)(CObject *)) ObjectCGOUpdate;
@@ -406,7 +606,7 @@ static CGO *ObjectCGOFloatArrayToCGO(PyMOLGlobals * G, float *raw, int len, int 
 ObjectCGO *ObjectCGOFromCGO(PyMOLGlobals * G, ObjectCGO * obj, CGO * cgo, int state)
 {
   ObjectCGO *I = NULL;
-  int est;
+  int est = 0;
 
   if(obj) {
     if(obj->Obj.type != cObjectCGO)     /* TODO: handle this */
@@ -424,13 +624,18 @@ ObjectCGO *ObjectCGOFromCGO(PyMOLGlobals * G, ObjectCGO * obj, CGO * cgo, int st
     I->NState = state + 1;
   }
 
+  if(I->State[state].shaderCGO && I->State[state].std!=I->State[state].shaderCGO) {
+    CGOFree(I->State[state].shaderCGO);
+    I->State[state].shaderCGO = 0;
+  }
   if(I->State[state].std) {
     CGOFree(I->State[state].std);
   }
   if(I->State[state].ray) {
     CGOFree(I->State[state].ray);
   }
-  est = CGOCheckComplex(cgo);
+  if (cgo)
+    est = CGOCheckComplex(cgo);
   if(est) {
     I->State[state].ray = cgo;
     I->State[state].std = CGOSimplify(cgo, est);
@@ -560,6 +765,10 @@ ObjectCGO *ObjectCGOFromFloatArray(PyMOLGlobals * G, ObjectCGO * obj,
     VLACheck(I->State, ObjectCGOState, state);
     I->NState = state + 1;
   }
+  if(I->State[state].shaderCGO && I->State[state].std!=I->State[state].shaderCGO) {
+    CGOFree(I->State[state].shaderCGO);
+    I->State[state].shaderCGO = 0;
+  }
   if(I->State[state].std) {
     CGOFree(I->State[state].std);
   }
@@ -579,8 +788,9 @@ ObjectCGO *ObjectCGOFromFloatArray(PyMOLGlobals * G, ObjectCGO * obj,
     if(est) {
       I->State[state].ray = cgo;
       I->State[state].std = CGOSimplify(cgo, est);
-    } else
+    } else {
       I->State[state].std = cgo;
+    }
     I->State[state].valid = true;
   } else if(!quiet) {
     ErrMessage(G, "ObjectCGO", "could not parse CGO.");
@@ -592,3 +802,5 @@ ObjectCGO *ObjectCGOFromFloatArray(PyMOLGlobals * G, ObjectCGO * obj,
   SceneCountFrames(G);
   return (I);
 }
+
+

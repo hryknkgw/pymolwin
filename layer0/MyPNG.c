@@ -1,5 +1,3 @@
-
-
 /* 
 A* -------------------------------------------------------------------
 B* This file contains source code for the PyMOL computer program
@@ -15,7 +13,6 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
-
 #include"os_predef.h"
 #include"MemoryDebug.h"
 
@@ -145,8 +142,8 @@ int MyPNGWrite(PyMOLGlobals * G, char *file_name, unsigned char *data_ptr,
                      PNG_RESOLUTION_METER);
       }
 
-      png_set_gamma(png_ptr, SettingGet(G, cSetting_png_screen_gamma),
-                    SettingGet(G, cSetting_png_file_gamma));
+      png_set_gamma(png_ptr, SettingGetGlobal_f(G, cSetting_png_screen_gamma),
+                    SettingGetGlobal_f(G, cSetting_png_file_gamma));
 
       /* stamp the image as being created by PyMOL we could consider
        * supporting optional annotations as well: PDB codes, canonical

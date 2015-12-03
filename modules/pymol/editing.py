@@ -213,7 +213,7 @@ SEE ALSO
         if _self._raising(r,_self): raise pymol.CmdException            
         return r
 
-    def set_symmetry(selection, a, b, c, alpha, beta, gamma, spacegroup="P1", _self=cmd):
+    def set_symmetry(selection, a, b, c, alpha, beta, gamma, spacegroup="P1", state=-1, _self=cmd):
 
         '''
 DESCRIPTION
@@ -240,7 +240,7 @@ PYMOL API
         selection = selector.process(selection)
         try:
             _self.lock(_self)
-            r = _cmd.set_symmetry(_self._COb,str(selection),
+            r = _cmd.set_symmetry(_self._COb,str(selection), int(state),
                                          float(a),float(b),float(c),
                                          float(alpha),float(beta),float(gamma),
                                          str(spacegroup))
@@ -248,6 +248,73 @@ PYMOL API
             _self.unlock(r,_self)
         if _self._raising(r,_self): raise pymol.CmdException            
         return r
+
+    def symmetry_copy(source_name='', target_name='', source_state=1, target_state=1, target_undo=1, log=0, quiet=1, _self=cmd):
+        """
+DESCRIPTION
+
+    "symmetry_copy" copies symmetry information from one object to another.
+
+USAGE
+
+    symmetry_copy source_name, target_name, source_state, target_state
+
+NOTES
+
+    Maps support accessing and setting states other than the first,
+    but molecular objects do not.
+
+    New in PyMOL v1.5.
+
+PYMOL API
+
+    cmd.symmetry_copy(source_name, target_name, source_state, target_state,
+        target_undo, log, quiet)
+
+        """
+
+        r = DEFAULT_ERROR
+
+        suspend_undo = _self.get("suspend_undo")
+        fin = 1
+        push_undo(target_name, just_coordinates=0, finish_undo=0, _self=_self)
+        _self.set("suspend_undo", 1, updates=0)
+
+        if source_name == None:
+            source_name = ''
+
+        target_name = str(target_name).strip()
+        source_name = str(source_name).strip()
+
+        # ignored for now
+        source_mode = 1
+        target_mode = 1
+        
+        try:
+            _self.lock(_self)
+            
+            r = _cmd.symmetry_copy(_self._COb,str(source_name),
+                                   str(target_name),
+                                   int(source_mode),
+                                   int(target_mode),
+                                   int(source_state)-1,
+                                   int(target_state)-1,
+                                   int(target_undo),
+                                   int(log),
+                                   int(quiet))
+        finally:
+            _self.unlock(r,_self)
+        if _self._raising(r,_self):
+            _self.set("suspend_undo", suspend_undo, updates=0)
+            fin = -1
+            push_undo("", just_coordinates=0, finish_undo=fin, _self=_self)
+            raise pymol.CmdException            
+
+            _self.set("suspend_undo", suspend_undo, updates=0)
+            push_undo("", just_coordinates=0, finish_undo=fin, _self=_self)
+
+        return r
+
 
     def set_name(old_name, new_name,_self=cmd):
         '''
@@ -520,7 +587,7 @@ PYMOL API
             r = _cmd.invert(_self._COb,int(quiet))
         finally:
             _self.unlock(r,_self)
-        if _self._raising(r,_self): raise pymol.QuietException            
+        if _self._raising(r,_self): raise cmd.QuietException
         return r
 
     def unbond(atom1="(pk1)", atom2="(pk2)", quiet=1, _self=cmd):
@@ -1752,7 +1819,7 @@ NOTES
 
         '''
         r = DEFAULT_ERROR
-        selection = selector.process(selection)                
+        selection = selector.process(selection)
         if int(transpose):
             matrix = [ matrix[0], matrix[4], matrix[8 ], matrix[12],
                        matrix[1], matrix[5], matrix[9 ], matrix[13],
@@ -2373,5 +2440,43 @@ DESCRIPTION
         if _self._raising(r,_self): raise pymol.CmdException
         return r
 
-    import pymol
+    def split_chains(selection='(all)', prefix=None, group=None, quiet=1, _self=cmd):
+        '''
+DESCRIPTION
+
+    Create a single object for each chain in selection
+
+SEE ALSO
+
+    split_states
+        '''
+        count = 0
+        models = _self.get_object_list('(' + selection + ')')
+        names_list = []
+        for model in models:
+            for chain in _self.get_chains('(%s) and model %s' % (selection, model)):
+                count += 1
+                if not prefix:
+                    name = '%s_%s' % (model, chain)
+                else:
+                    name = '%s%04d' % (prefix, count)
+                _self.create(name, '(%s) and model %s and chain "%s"' %
+                        (selection, model, chain), zoom=0)
+                names_list.append(name)
+            _self.disable(model)
+
+        if group:
+            cmd.group(group, ' '.join(names_list), 'add')
+
+    def mse2met(selection='all', quiet=1, _self=cmd):
+        '''
+DESCRIPTION
+
+    Mutate selenomethionine to methionine
+        '''
+        x = _self.alter('(%s) and MSE/SE' % selection, 'name="SD";elem="S"')
+        _self.flag('ignore', '(%s) and resn MSE' % (selection), 'clear')
+        _self.alter('(%s) and resn MSE' % selection, 'resn="MET";type="ATOM"')
+        if not int(quiet):
+            print ' Altered %d MSE residues to MET' % (x)
 

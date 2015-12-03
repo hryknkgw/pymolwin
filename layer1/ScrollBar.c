@@ -20,6 +20,7 @@ Z* -------------------------------------------------------------------
 #include"OOMac.h"
 #include"Ortho.h"
 #include"ScrollBar.h"
+#include"CGO.h"
 
 typedef struct CScrollBar {
   Block *Block;
@@ -80,15 +81,30 @@ static void ScrollBarUpdate(struct CScrollBar *I)
     I->Value = (float) I->ValueMax;
 }
 
-static void ScrollBarDraw(Block * block)
+void ScrollBarFill(struct CScrollBar *I ORTHOCGOARG)
+{
+  if (orthoCGO)
+    CGOColorv(orthoCGO, I->BackColor);
+  else
+    glColor3fv(I->BackColor);
+  BlockFill(I->Block ORTHOCGOARGVAR);
+}
+
+static void ScrollBarDraw(Block * block ORTHOCGOARG)
+{
+  ScrollBarDrawImpl(block, true ORTHOCGOARGVAR);
+}
+
+void ScrollBarDrawImpl(Block * block, short fill  ORTHOCGOARG)
 {
   PyMOLGlobals *G = block->G;
   float value;
   int top, left, bottom, right;
 
   CScrollBar *I = (CScrollBar *) block->reference;
-  glColor3fv(I->BackColor);
-  BlockFill(I->Block);
+
+  if (fill)
+    ScrollBarFill(I ORTHOCGOARGVAR);
 
   ScrollBarUpdate(I);
 
@@ -113,42 +129,81 @@ static void ScrollBarDraw(Block * block)
   }
 
   if(G->HaveGUI && G->ValidContext) {
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.8F, 0.8F, 0.8F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, right, top, 0.f);
+      CGOVertex(orthoCGO, right, bottom + 1, 0.f);
+      CGOVertex(orthoCGO, left, top, 0.f);
+      CGOVertex(orthoCGO, left, bottom + 1, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.8F, 0.8F, 0.8F);
+      glBegin(GL_POLYGON);
+      glVertex2i(right, top);
+      glVertex2i(right, bottom + 1);
+      glVertex2i(left, bottom + 1);
+      glVertex2i(left, top);
+      glEnd();
+    }
 
-    glColor3f(0.8F, 0.8F, 0.8F);
-    glBegin(GL_POLYGON);
-    glVertex2i(right, top);
-    glVertex2i(right, bottom + 1);
-    glVertex2i(left, bottom + 1);
-    glVertex2i(left, top);
-    glEnd();
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.3F, 0.3F, 0.3F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, right, top - 1, 0.f);
+      CGOVertex(orthoCGO, right, bottom, 0.f);
+      CGOVertex(orthoCGO, left + 1, top - 1, 0.f);
+      CGOVertex(orthoCGO, left + 1, bottom, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.3F, 0.3F, 0.3F);
+      glBegin(GL_POLYGON);
+      glVertex2i(right, top - 1);
+      glVertex2i(right, bottom);
+      glVertex2i(left + 1, bottom);
+      glVertex2i(left + 1, top - 1);
+      glEnd();
+    }
 
-    glColor3f(0.3F, 0.3F, 0.3F);
-    glBegin(GL_POLYGON);
-    glVertex2i(right, top - 1);
-    glVertex2i(right, bottom);
-    glVertex2i(left + 1, bottom);
-    glVertex2i(left + 1, top - 1);
-    glEnd();
+    if (orthoCGO){
+      CGOColor(orthoCGO, 0.3F, 0.3F, 0.3F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, right, bottom + 1, 0.f);
+      CGOVertex(orthoCGO, right, bottom, 0.f);
+      CGOVertex(orthoCGO, left, bottom + 1, 0.f);
+      CGOVertex(orthoCGO, left, bottom, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3f(0.3F, 0.3F, 0.3F);
+      glBegin(GL_POLYGON);
+      glVertex2i(right, bottom + 1);
+      glVertex2i(right, bottom);
+      glVertex2i(left, bottom);
+      glVertex2i(left, bottom + 1);
+      glEnd();
+    }
 
-    glColor3f(0.3F, 0.3F, 0.3F);
-    glBegin(GL_POLYGON);
-    glVertex2i(right, bottom + 1);
-    glVertex2i(right, bottom);
-    glVertex2i(left, bottom);
-    glVertex2i(left, bottom + 1);
-    glEnd();
-
-    glColor3fv(I->BarColor);
-    glBegin(GL_POLYGON);
-    glVertex2i(right - 1, top - 1);
-    glVertex2i(right - 1, bottom + 1);
-    glVertex2i(left + 1, bottom + 1);
-    glVertex2i(left + 1, top - 1);
-    glEnd();
+    if (orthoCGO){
+      CGOColorv(orthoCGO, I->BarColor);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, right - 1, top - 1, 0.f);
+      CGOVertex(orthoCGO, right - 1, bottom + 1, 0.f);
+      CGOVertex(orthoCGO, left + 1, top - 1, 0.f);
+      CGOVertex(orthoCGO, left + 1, bottom + 1, 0.f);
+      CGOEnd(orthoCGO);
+    } else {
+      glColor3fv(I->BarColor);
+      glBegin(GL_POLYGON);
+      glVertex2i(right - 1, top - 1);
+      glVertex2i(right - 1, bottom + 1);
+      glVertex2i(left + 1, bottom + 1);
+      glVertex2i(left + 1, top - 1);
+      glEnd();
+    }
   }
 }
 
-void ScrollBarDrawHandle(struct CScrollBar *I, float alpha)
+void ScrollBarDrawHandle(struct CScrollBar *I, float alpha ORTHOCGOARG)
 {
   float value;
   int top, left, bottom, right;
@@ -175,39 +230,85 @@ void ScrollBarDrawHandle(struct CScrollBar *I, float alpha)
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    if (orthoCGO){
+      CGOAlpha(orthoCGO, alpha);
+      CGOColor(orthoCGO, 0.8F, 0.8F, 0.8F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, right, top, 0.f);
+      CGOVertex(orthoCGO, right, bottom + 1, 0.f);
+      CGOVertex(orthoCGO, left, top, 0.f);
+      CGOVertex(orthoCGO, left, bottom + 1, 0.f);
+      CGOEnd(orthoCGO);
+      CGOAlpha(orthoCGO, 1.f);
+    } else {
+      glColor4f(0.8F, 0.8F, 0.8F, alpha);
+      glBegin(GL_POLYGON);
+      glVertex2i(right, top);
+      glVertex2i(right, bottom + 1);
+      glVertex2i(left, bottom + 1);
+      glVertex2i(left, top);
+      glEnd();
+    }
 
-    glColor4f(0.8F, 0.8F, 0.8F, alpha);
-    glBegin(GL_POLYGON);
-    glVertex2i(right, top);
-    glVertex2i(right, bottom + 1);
-    glVertex2i(left, bottom + 1);
-    glVertex2i(left, top);
-    glEnd();
+    if (orthoCGO){
+      CGOAlpha(orthoCGO, alpha);
+      CGOColor(orthoCGO, 0.3F, 0.3F, 0.3F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, right, top - 1, 0.f);
+      CGOVertex(orthoCGO, right, bottom, 0.f);
+      CGOVertex(orthoCGO, left + 1, top - 1, 0.f);
+      CGOVertex(orthoCGO, left + 1, bottom, 0.f);
+      CGOEnd(orthoCGO);
+      CGOAlpha(orthoCGO, 1.f);
+    } else {
+      glColor4f(0.3F, 0.3F, 0.3F, alpha);
+      glBegin(GL_POLYGON);
+      glVertex2i(right, top - 1);
+      glVertex2i(right, bottom);
+      glVertex2i(left + 1, bottom);
+      glVertex2i(left + 1, top - 1);
+      glEnd();
+    }
 
-    glColor4f(0.3F, 0.3F, 0.3F, alpha);
-    glBegin(GL_POLYGON);
-    glVertex2i(right, top - 1);
-    glVertex2i(right, bottom);
-    glVertex2i(left + 1, bottom);
-    glVertex2i(left + 1, top - 1);
-    glEnd();
+    if (orthoCGO){
+      CGOAlpha(orthoCGO, alpha);
+      CGOColor(orthoCGO, 0.3F, 0.3F, 0.3F);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, right, bottom + 1, 0.f);
+      CGOVertex(orthoCGO, right, bottom, 0.f);
+      CGOVertex(orthoCGO, left, bottom, 0.f);
+      CGOVertex(orthoCGO, left, bottom + 1, 0.f);
+      CGOEnd(orthoCGO);
+      CGOAlpha(orthoCGO, 1.f);
+    } else {
+      glColor4f(0.3F, 0.3F, 0.3F, alpha);
+      glBegin(GL_POLYGON);
+      glVertex2i(right, bottom + 1);
+      glVertex2i(right, bottom);
+      glVertex2i(left, bottom);
+      glVertex2i(left, bottom + 1);
+      glEnd();
+    }
 
-    glColor4f(0.3F, 0.3F, 0.3F, alpha);
-    glBegin(GL_POLYGON);
-    glVertex2i(right, bottom + 1);
-    glVertex2i(right, bottom);
-    glVertex2i(left, bottom);
-    glVertex2i(left, bottom + 1);
-    glEnd();
-
-    glColor4f(I->BarColor[0], I->BarColor[1], I->BarColor[2], alpha);
-    glBegin(GL_POLYGON);
-    glVertex2i(right - 1, top - 1);
-    glVertex2i(right - 1, bottom + 1);
-    glVertex2i(left + 1, bottom + 1);
-    glVertex2i(left + 1, top - 1);
-    glEnd();
-
+    if (orthoCGO){
+      CGOAlpha(orthoCGO, alpha);
+      CGOColor(orthoCGO, I->BarColor[0], I->BarColor[1], I->BarColor[2]);
+      CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+      CGOVertex(orthoCGO, right - 1, top - 1, 0.f);
+      CGOVertex(orthoCGO, right - 1, bottom + 1, 0.f);
+      CGOVertex(orthoCGO, left + 1, top - 1, 0.f);
+      CGOVertex(orthoCGO, left + 1, bottom + 1, 0.f);
+      CGOEnd(orthoCGO);
+      CGOAlpha(orthoCGO, 1.f);
+    } else {
+      glColor4f(I->BarColor[0], I->BarColor[1], I->BarColor[2], alpha);
+      glBegin(GL_POLYGON);
+      glVertex2i(right - 1, top - 1);
+      glVertex2i(right - 1, bottom + 1);
+      glVertex2i(left + 1, bottom + 1);
+      glVertex2i(left + 1, top - 1);
+      glEnd();
+    }
     glDisable(GL_BLEND);
   }
 }
@@ -353,7 +454,7 @@ static int ScrollBarDrag(Block * block, int x, int y, int mod)
   if(I->Value > I->ValueMax)
     I->Value = I->ValueMax;
   OrthoDirty(G);
-  return 0;
+  return true;
 }
 
 static int ScrollBarRelease(Block * block, int button, int x, int y, int mod)
@@ -384,10 +485,15 @@ void ScrollBarSetBox(struct CScrollBar *I, int top, int left, int bottom, int ri
   I->Block->rect.right = right;
 }
 
-void ScrollBarDoDraw(struct CScrollBar *I)
+void ScrollBarDoDraw(struct CScrollBar *I ORTHOCGOARG)
 {
   if(I->Block->fDraw)
-    I->Block->fDraw(I->Block);
+    I->Block->fDraw(I->Block ORTHOCGOARGVAR);
+}
+
+void ScrollBarDoDrawNoFill(struct CScrollBar *I ORTHOCGOARG)
+{
+  ScrollBarDrawImpl(I->Block, false ORTHOCGOARGVAR);
 }
 
 void ScrollBarDoRelease(struct CScrollBar *I, int button, int x, int y, int mod)

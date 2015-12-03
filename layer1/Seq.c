@@ -14,7 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
-
+#include"os_python.h"
 #include "os_gl.h"
 #include "os_std.h"
 
@@ -293,7 +293,7 @@ static int SeqClick(Block * block, int button, int x, int y, int mod)
   return (1);
 }
 
-static void SeqDraw(Block * block)
+static void SeqDraw(Block * block ORTHOCGOARG)
 {
   PyMOLGlobals *G = block->G;
   register CSeq *I = G->Seq;
@@ -306,7 +306,7 @@ static void SeqDraw(Block * block)
     int label_color_index = SettingGetGlobal_color(G, cSetting_seq_view_label_color);
     float *label_color = ColorGet(G, label_color_index);
     copy3f(label_color, overlay_color);
-    bg_color = SettingGet_3fv(G, NULL, NULL, cSetting_bg_rgb);
+    bg_color = ColorGet(G, SettingGet_color(G, NULL, NULL, cSetting_bg_rgb));
     overlay_color[0] = overlay_color[0] - bg_color[0];
     overlay_color[1] = overlay_color[1] - bg_color[1];
     overlay_color[2] = overlay_color[2] - bg_color[2];
@@ -318,7 +318,7 @@ static void SeqDraw(Block * block)
                       I->Block->rect.left + I->ScrollBarMargin,
                       I->Block->rect.bottom + 2,
                       I->Block->rect.right - I->ScrollBarMargin);
-      ScrollBarDoDraw(I->ScrollBar);
+      ScrollBarDoDraw(I->ScrollBar ORTHOCGOARGVAR);
       y += I->ScrollBarWidth;
       I->NSkip = (int) ScrollBarGetValue(I->ScrollBar);
     } else {
@@ -398,7 +398,7 @@ static void SeqDraw(Block * block)
           pix_wid = I->CharWidth * ch_wid;
           tot_len = col->offset + ch_wid - I->NSkip;
           if(tot_len <= vis_size) {
-            TextDrawSubStrFast(G, row->txt, xx, y1, col->start, ch_wid);
+            TextDrawSubStrFast(G, row->txt, xx, y1, col->start, ch_wid ORTHOCGOARGVAR);
           }
         }
         y1 += I->LineHeight;
@@ -408,7 +408,11 @@ static void SeqDraw(Block * block)
       for(a = I->NRow - 1; a >= 0; a--) {
         row = I->Row + a;
         cur_color = overlay_color;
-        glColor3fv(cur_color);
+	if (orthoCGO){
+	  CGOColorv(orthoCGO, cur_color);
+	} else {
+	  glColor3fv(cur_color);
+	}
         yy = y1 - 2;
         if(max_len < row->ext_len)
           max_len = row->ext_len;
@@ -436,7 +440,11 @@ static void SeqDraw(Block * block)
             if(tot_len <= vis_size) {
               if(row->label_flag) {
                 TextSetColor(G, cur_color);
-                glColor3fv(cur_color);
+		if (orthoCGO){
+		  CGOColorv(orthoCGO, cur_color);
+		} else {
+		  glColor3fv(cur_color);
+		}
               } else if(col->unaligned && unaligned_color) {
                 float tmp_color[3];
                 float *v = ColorGet(G, col->color);
@@ -445,34 +453,59 @@ static void SeqDraw(Block * block)
                 case 4:
                   average3f(v, bg_color, tmp_color);
                   TextSetColor(G, tmp_color);
-                  glColor3fv(tmp_color);
+		  if (orthoCGO){
+		    CGOColorv(orthoCGO, tmp_color);
+		  } else {
+		    glColor3fv(tmp_color);
+		  }
                   break;
                 case 2:
                 case 5:
                   average3f(v, unaligned_color, tmp_color);
                   TextSetColor(G, tmp_color);
-                  glColor3fv(tmp_color);
+		  if (orthoCGO){
+		    CGOColorv(orthoCGO, tmp_color);
+		  } else {
+		    glColor3fv(tmp_color);
+		  }
                   break;
                 default:
                   TextSetColor(G, unaligned_color);
-                  glColor3fv(unaligned_color);
+		  if (orthoCGO){
+		    CGOColorv(orthoCGO, unaligned_color);
+		  } else {
+		    glColor3fv(unaligned_color);
+		  }
                   break;
                 }
               } else {
                 float *v = ColorGet(G, col->color);
                 TextSetColor(G, v);
-                glColor3fv(v);
+		if (orthoCGO){
+		  CGOColorv(orthoCGO, v);
+		} else {
+		  glColor3fv(v);
+		}
               }
               if(col->inverse) {
-                glBegin(GL_POLYGON);
-                glVertex2i(xx, yy);
-                glVertex2i(xx, yy + I->LineHeight - 1);
-                glVertex2i(xx + pix_wid, yy + I->LineHeight - 1);
-                glVertex2i(xx + pix_wid, yy);
-                glEnd();
+		if (orthoCGO){
+		  CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+		  CGOVertex(orthoCGO, xx, yy, 0.f);
+		  CGOVertex(orthoCGO, xx, yy + I->LineHeight - 1, 0.f);
+		  CGOVertex(orthoCGO, xx + pix_wid, yy, 0.f);
+		  CGOVertex(orthoCGO, xx + pix_wid, yy + I->LineHeight - 1, 0.f);
+		  CGOEnd(orthoCGO);
+		} else {
+		  glBegin(GL_POLYGON);
+		  glVertex2i(xx, yy);
+		  glVertex2i(xx, yy + I->LineHeight - 1);
+		  glVertex2i(xx + pix_wid, yy + I->LineHeight - 1);
+		  glVertex2i(xx + pix_wid, yy);
+		  glEnd();
+		}
                 TextSetColor(G, black);
               }
-              TextDrawSubStrFast(G, row->txt, xx, y1, col->start, ch_wid);
+              TextDrawSubStrFast(G, row->txt, xx, y1, col->start, ch_wid ORTHOCGOARGVAR);
             }
           }
         }
@@ -490,7 +523,7 @@ static void SeqDraw(Block * block)
               pix_wid = I->CharWidth * ch_wid;
               tot_len = col->offset + ch_wid - I->NSkip;
               if(tot_len <= vis_size) {
-                TextDrawCharRepeat(G, fill_char, xx, y1, col->start, ch_wid);
+                TextDrawCharRepeat(G, fill_char, xx, y1, col->start, ch_wid ORTHOCGOARGVAR);
               }
             }
           }
@@ -532,16 +565,26 @@ static void SeqDraw(Block * block)
             xx2 =
               x + I->CharMargin + I->CharWidth * (col2->offset +
                                                   (col2->stop - col2->start) - I->NSkip);
-            glColor3fv(overlay_color);
-            glBegin(GL_LINE_LOOP);
-            glVertex2i(xx, yy);
-            glVertex2i(xx, yy + I->LineHeight - 2);
-            glVertex2i(xx2, yy + I->LineHeight - 2);
-            glVertex2i(xx2, yy);
-            glEnd();
-
-          }
-        }
+	    if (orthoCGO){
+	      CGOColorv(orthoCGO, overlay_color);
+	      CGOLineAsTriangleStrips(orthoCGO, xx, yy, xx2, yy + I->LineHeight - 2);
+	      /* TODO: need to convert to triangles
+	      CGOBegin(orthoCGO, GL_LINE_LOOP);
+	      CGOVertex(orthoCGO, xx, yy);
+	      CGOVertex(orthoCGO, xx, yy + I->LineHeight - 2);
+	      CGOVertex(orthoCGO, xx2, yy + I->LineHeight - 2);
+	      CGOVertex(orthoCGO, xx2, yy);
+	      CGOEnd(orthoCGO);*/
+	    } else {
+	      glBegin(GL_LINE_LOOP);
+	      glVertex2i(xx, yy);
+	      glVertex2i(xx, yy + I->LineHeight - 2);
+	      glVertex2i(xx2, yy + I->LineHeight - 2);
+	      glVertex2i(xx2, yy);
+	      glEnd();
+	    }
+	  }
+	}
       }
       if(I->ScrollBarActive) {
         int real_count = n_real;
@@ -586,13 +629,23 @@ static void SeqDraw(Block * block)
                   stop = cent + 0.5F;
                 }
 
-                glColor3fv(cur_color);
-                glBegin(GL_POLYGON);
-                glVertex2f(start, bot);
-                glVertex2f(start, top);
-                glVertex2f(stop, top);
-                glVertex2f(stop, bot);
-                glEnd();
+		if (orthoCGO){
+		  CGOColorv(orthoCGO, cur_color);
+		  CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+		  CGOVertex(orthoCGO, start, bot, 0.f);
+		  CGOVertex(orthoCGO, start, top, 0.f);
+		  CGOVertex(orthoCGO, stop, bot, 0.f);
+		  CGOVertex(orthoCGO, stop, top, 0.f);
+		  CGOEnd(orthoCGO);
+		} else {
+		  glColor3fv(cur_color);
+		  glBegin(GL_POLYGON);
+		  glVertex2f(start, bot);
+		  glVertex2f(start, top);
+		  glVertex2f(stop, top);
+		  glVertex2f(stop, bot);
+		  glEnd();
+		}
                 mode = 0;
               } else if(col->inverse && mode) {
                 if(last_color != col->color) {
@@ -607,13 +660,23 @@ static void SeqDraw(Block * block)
                     start = cent - 0.5F;
                     stop = cent + 0.5F;
                   }
-                  glColor3fv(cur_color);
-                  glBegin(GL_POLYGON);
-                  glVertex2f(start, bot);
-                  glVertex2f(start, top);
-                  glVertex2f(stop, top);
-                  glVertex2f(stop, bot);
-                  glEnd();
+		  if (orthoCGO){
+		    CGOColorv(orthoCGO, cur_color);
+		    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+		    CGOVertex(orthoCGO, start, bot, 0.f);
+		    CGOVertex(orthoCGO, start, top, 0.f);
+		    CGOVertex(orthoCGO, stop, bot, 0.f);
+		    CGOVertex(orthoCGO, stop, top, 0.f);
+		    CGOEnd(orthoCGO);
+		  } else {
+		    glColor3fv(cur_color);
+		    glBegin(GL_POLYGON);
+		    glVertex2f(start, bot);
+		    glVertex2f(start, top);
+		    glVertex2f(stop, top);
+		    glVertex2f(stop, bot);
+		    glEnd();
+		  }
                   start = (width * col->offset) / max_len;
                   last_color = col->color;
                   if(row->label_flag)
@@ -633,19 +696,28 @@ static void SeqDraw(Block * block)
                 start = cent - 0.5F;
                 stop = cent + 0.5F;
               }
-              glColor3fv(cur_color);
-              glBegin(GL_POLYGON);
-              glVertex2f(start, bot);
-              glVertex2f(start, top);
-              glVertex2f(stop, top);
-              glVertex2f(stop, bot);
-              glEnd();
-            }
-
+	      if (orthoCGO){
+		CGOColorv(orthoCGO, cur_color);
+		CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+		CGOVertex(orthoCGO, start, bot, 0.f);
+		CGOVertex(orthoCGO, start, top, 0.f);
+		CGOVertex(orthoCGO, stop, bot, 0.f);
+		CGOVertex(orthoCGO, stop, top, 0.f);
+		CGOEnd(orthoCGO);
+	      } else {
+		glColor3fv(cur_color);
+		glBegin(GL_POLYGON);
+		glVertex2f(start, bot);
+		glVertex2f(start, top);
+		glVertex2f(stop, top);
+		glVertex2f(stop, bot);
+		glEnd();
+	      }
+	    }
           }
         }
 
-        ScrollBarDrawHandle(I->ScrollBar, 0.35F);
+        ScrollBarDrawHandle(I->ScrollBar, 0.35F ORTHOCGOARGVAR);
       }
     }
   }

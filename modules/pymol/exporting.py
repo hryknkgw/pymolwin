@@ -170,21 +170,24 @@ PYMOL API
     
     def get_fastastr(selection="all", state=-1, quiet=1, _self=cmd):
         dict = { 'seq' : {} }
-        _self.iterate("("+selection+") and polymer and name ca",
+        # we use (alt '' or alt 'A') because 'guide' picks up 
+        # non-canonical structures: eg, 1ejg has residue 22 as a SER and 
+        # PRO, which guide will report twice
+        _self.iterate("("+selection+") and polymer and name ca and (alt '' or alt 'A')",
                     "seq[model]=seq.get(model,[]);seq[model].append(resn)",space=dict)
         seq = dict['seq']
         result = []
         for obj in _self.get_names("objects",selection='('+selection+')'):
             if seq.has_key(obj):
-                seq = map(lambda x:_resn_to_aa.get(x,'?'),seq[obj])
+                cur_seq = map(lambda x:_resn_to_aa.get(x,'?'),seq[obj])
                 result.append(">%s"%obj)
-                seq = string.join(seq,'')
-                while len(seq):
-                    if len(seq)>=70:
-                        result.append(seq[0:70])
-                        seq=seq[70:]
+                cur_seq = string.join(cur_seq,'')
+                while len(cur_seq):
+                    if len(cur_seq)>=70:
+                        result.append(cur_seq[0:70])
+                        cur_seq=cur_seq[70:]
                     else:
-                        result.append(seq)
+                        result.append(cur_seq)
                         break
         result = string.join(result,'\n')
         if len(result):
@@ -282,6 +285,20 @@ NOTES
             raise QuietException                  
         return r
         
+    def _unit2px(value, dpi):
+        '''API only. Returns pixel units given a string representation in other units'''
+        if isinstance(value, str):
+            m = re.search(r'[a-z].*', value, re.I)
+            if m:
+                if dpi <= 0:
+                    raise pymol.CmdException('need dpi if units are given')
+                value, unit = value[:m.start()], m.group(0).lower()
+                upi = {'in': 1.0, 'mm': 25.4, 'cm': 2.54}
+                if unit not in upi:
+                    raise pymol.CmdException('unknown unit, supported units are: ' +
+                            ', '.join(upi))
+                value = float(value) * dpi / upi[unit] + 0.5
+        return int(value)
 
     def png(filename, width=0, height=0, dpi=-1.0, ray=0,
             quiet=1, prior=0, format=0, _self=cmd):
@@ -298,9 +315,12 @@ ARGUMENTS
 
     filename = string: file path to be written
     
-    width = integer: width in pixels {default: 0 (current)}
+    width = integer or string: width in pixels (without units), inches (in)
+    or centimeters (cm). If unit suffix is given, dpi argument is required
+    as well. If only one of width or height is given, the aspect ratio of
+    the viewport is preserved. {default: 0 (current)}
 
-    height = integer: height in pixels {default: 0 (current)}
+    height = integer or string: height (see width) {default: 0 (current)}
 
     dpi = float: dots-per-inch {default -1.0 (unspecified)}
 
@@ -310,6 +330,7 @@ EXAMPLES
 
     png image.png
     png image.png, dpi=300
+    png image.png, 10cm, dpi=300, ray=1
 
 NOTES
 
@@ -334,6 +355,10 @@ PYMOL API
                 if prior < 0: # default is to fall back to actual rendering
                     prior = 0
         if not prior:
+            dpi = float(dpi)
+            width = _unit2px(width, dpi)
+            height = _unit2px(height, dpi)
+
             if thread.get_ident() == pymol.glutThread:
                 r = _self._png(str(filename),int(width),int(height),float(dpi),
                                int(ray),int(quiet),0,int(format),_self)

@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 #include"os_predef.h"
 #include"os_std.h"
 #include"os_gl.h"
@@ -256,10 +257,10 @@ static int ControlDrag(Block * block, int x, int y, int mod)
     delta = x - I->LastPos;
     if(I->DragFlag) {
       if(delta) {
-        gui_width = (int) SettingGet(G, cSetting_internal_gui_width) - delta;
+        gui_width = SettingGetGlobal_i(G, cSetting_internal_gui_width) - delta;
         if(gui_width < cControlMinWidth)
           gui_width = cControlMinWidth;
-        delta = (int) SettingGet(G, cSetting_internal_gui_width) - gui_width;
+        delta = SettingGetGlobal_i(G, cSetting_internal_gui_width) - gui_width;
         width = OrthoGetWidth(G) + delta;
         I->LastPos = x;
         I->SaveWidth = 0;
@@ -270,6 +271,7 @@ static int ControlDrag(Block * block, int x, int y, int mod)
       I->Active = which_button(I, x, y);
       if(I->Active != I->Pressed)
         I->Active = -1;
+      OrthoInvalidateDoDraw(G);
       OrthoDirty(G);
     }
   }
@@ -297,7 +299,7 @@ static int ControlRelease(Block * block, int button, int x, int y, int mod)
       break;
     case 2:
       MoviePlay(G, cMovieStop);
-      if(SettingGet(G, cSetting_sculpting))
+      if(SettingGetGlobal_b(G, cSetting_sculpting))
         SettingSet(G, cSetting_sculpting, 0);
       if(SettingGetGlobal_b(G, cSetting_rock))
         SettingSetGlobal_b(G, cSetting_rock, false);
@@ -388,7 +390,7 @@ int ControlIdling(PyMOLGlobals * G)
   CControl *I = G->Control;
   return (I->sdofActive ||
           MoviePlaying(G) ||
-          SettingGetGlobal_b(G, cSetting_rock) || SettingGet(G, cSetting_sculpting));
+          SettingGetGlobal_b(G, cSetting_rock) || SettingGetGlobal_b(G, cSetting_sculpting));
 }
 
 
@@ -454,7 +456,7 @@ static int ControlClick(Block * block, int button, int x, int y, int mod)
           OrthoReshape(G, -1, -1, false);
           I->SaveWidth = 0;
         } else {
-          I->SaveWidth = (int) SettingGet(G, cSetting_internal_gui_width);
+          I->SaveWidth = SettingGetGlobal_i(G, cSetting_internal_gui_width);
           SettingSet(G, cSetting_internal_gui_width, (float) cControlMinWidth);
           OrthoReshape(G, -1, -1, false);
         }
@@ -477,37 +479,62 @@ static int ControlClick(Block * block, int button, int x, int y, int mod)
 }
 
 static void draw_button(int x2, int y2, int w, int h, float *light, float *dark,
-                        float *inside)
+                        float *inside ORTHOCGOARG)
 {
-  glColor3fv(light);
-  glBegin(GL_POLYGON);
-  glVertex2i(x2, y2);
-  glVertex2i(x2, y2 + h);
-  glVertex2i(x2 + w, y2 + h);
-  glVertex2i(x2 + w, y2);
-  glEnd();
-
-  glColor3fv(dark);
-  glBegin(GL_POLYGON);
-  glVertex2i(x2 + 1, y2);
-  glVertex2i(x2 + 1, y2 + h - 1);
-  glVertex2i(x2 + w, y2 + h - 1);
-  glVertex2i(x2 + w, y2);
-  glEnd();
-
-  glColor3fv(inside);
-  glBegin(GL_POLYGON);
-  glVertex2i(x2 + 1, y2 + 1);
-  glVertex2i(x2 + 1, y2 + h - 1);
-  glVertex2i(x2 + w - 1, y2 + h - 1);
-  glVertex2i(x2 + w - 1, y2 + 1);
-  glEnd();
-
+  if (orthoCGO){
+    CGOColorv(orthoCGO, light);
+    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+    CGOVertex(orthoCGO, x2, y2, 0.f);
+    CGOVertex(orthoCGO, x2, y2 + h, 0.f);
+    CGOVertex(orthoCGO, x2 + w, y2, 0.f);
+    CGOVertex(orthoCGO, x2 + w, y2 + h, 0.f);
+    CGOEnd(orthoCGO);
+    
+    CGOColorv(orthoCGO, dark);
+    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+    CGOVertex(orthoCGO, x2 + 1, y2, 0.f);
+    CGOVertex(orthoCGO, x2 + 1, y2 + h - 1, 0.f);
+    CGOVertex(orthoCGO, x2 + w, y2, 0.f);
+    CGOVertex(orthoCGO, x2 + w, y2 + h - 1, 0.f);
+    CGOEnd(orthoCGO);
+    
+    CGOColorv(orthoCGO, inside);
+    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+    CGOVertex(orthoCGO, x2 + 1, y2 + 1, 0.f);
+    CGOVertex(orthoCGO, x2 + 1, y2 + h - 1, 0.f);
+    CGOVertex(orthoCGO, x2 + w - 1, y2 + 1, 0.f);
+    CGOVertex(orthoCGO, x2 + w - 1, y2 + h - 1, 0.f);
+    CGOEnd(orthoCGO);
+  } else {
+    glColor3fv(light);
+    glBegin(GL_POLYGON);
+    glVertex2i(x2, y2);
+    glVertex2i(x2, y2 + h);
+    glVertex2i(x2 + w, y2 + h);
+    glVertex2i(x2 + w, y2);
+    glEnd();
+    
+    glColor3fv(dark);
+    glBegin(GL_POLYGON);
+    glVertex2i(x2 + 1, y2);
+    glVertex2i(x2 + 1, y2 + h - 1);
+    glVertex2i(x2 + w, y2 + h - 1);
+    glVertex2i(x2 + w, y2);
+    glEnd();
+    
+    glColor3fv(inside);
+    glBegin(GL_POLYGON);
+    glVertex2i(x2 + 1, y2 + 1);
+    glVertex2i(x2 + 1, y2 + h - 1);
+    glVertex2i(x2 + w - 1, y2 + h - 1);
+    glVertex2i(x2 + w - 1, y2 + 1);
+    glEnd();
+  }
 }
 
 
 /*========================================================================*/
-static void ControlDraw(Block * block)
+static void ControlDraw(Block * block ORTHOCGOARG)
 {
   PyMOLGlobals *G = block->G;
   register CControl *I = G->Control;
@@ -522,10 +549,16 @@ static void ControlDraw(Block * block)
 
     int control_width = I->Block->rect.right - (I->Block->rect.left + cControlLeftMargin);
 
-    glColor3fv(I->Block->BackColor);
-    BlockFill(I->Block);
-    glColor3fv(I->Block->TextColor);
+    if (orthoCGO)
+      CGOColorv(orthoCGO, I->Block->BackColor);
+    else
+      glColor3fv(I->Block->BackColor);
+    BlockFill(I->Block ORTHOCGOARGVAR);
 
+    if (orthoCGO)
+      CGOColorv(orthoCGO, I->Block->TextColor);
+    else
+      glColor3fv(I->Block->TextColor);
     {
       int top, left, bottom, right;
 
@@ -534,31 +567,58 @@ static void ControlDraw(Block * block)
       top = I->Block->rect.top - (cControlTopMargin - 1);
       right = left + 5;
 
-      glColor3f(0.8F, 0.8F, 0.8F);
-      glBegin(GL_POLYGON);
-      glVertex2i(right, top);
-      glVertex2i(right, bottom);
-      glVertex2i(left, bottom);
-      glVertex2i(left, top);
-      glEnd();
-
-      glColor3f(0.3F, 0.3F, 0.3F);
-      glBegin(GL_POLYGON);
-      glVertex2i(right, top - 1);
-      glVertex2i(right, bottom);
-      glVertex2i(left + 1, bottom);
-      glVertex2i(left + 1, top - 1);
-      glEnd();
-
-      glColor3fv(I->ButtonColor);
-
-      glBegin(GL_POLYGON);
-      glVertex2i(right - 1, top - 1);
-      glVertex2i(right - 1, bottom + 1);
-      glVertex2i(left + 1, bottom + 1);
-      glVertex2i(left + 1, top - 1);
-      glEnd();
-    }
+      /* This draws the separator on the left side of the movie control buttons */
+      if (orthoCGO){
+	CGOColor(orthoCGO, 0.8F, 0.8F, 0.8F);
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, right, top, 0.f);
+	CGOVertex(orthoCGO, right, bottom, 0.f);
+	CGOVertex(orthoCGO, left, top, 0.f);
+	CGOVertex(orthoCGO, left, bottom, 0.f);
+	CGOEnd(orthoCGO);
+	
+	CGOColor(orthoCGO, 0.3F, 0.3F, 0.3F);
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, right, top - 1, 0.f);
+	CGOVertex(orthoCGO, right, bottom, 0.f);
+	CGOVertex(orthoCGO, left + 1, top - 1, 0.f);
+	CGOVertex(orthoCGO, left + 1, bottom, 0.f);
+	CGOEnd(orthoCGO);
+	
+	CGOColorv(orthoCGO, I->ButtonColor);
+	
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, right - 1, top - 1, 0.f);
+	CGOVertex(orthoCGO, right - 1, bottom + 1, 0.f);
+	CGOVertex(orthoCGO, left + 1, top - 1, 0.f);
+	CGOVertex(orthoCGO, left + 1, bottom + 1, 0.f);
+	CGOEnd(orthoCGO);
+      } else {
+	glColor3f(0.8F, 0.8F, 0.8F);
+	glBegin(GL_POLYGON);
+	glVertex2i(right, top);
+	glVertex2i(right, bottom);
+	glVertex2i(left, bottom);
+	glVertex2i(left, top);
+	glEnd();
+	
+	glColor3f(0.3F, 0.3F, 0.3F);
+	glBegin(GL_POLYGON);
+	glVertex2i(right, top - 1);
+	glVertex2i(right, bottom);
+	glVertex2i(left + 1, bottom);
+	glVertex2i(left + 1, top - 1);
+	glEnd();
+	
+	glColor3fv(I->ButtonColor);
+	
+	glBegin(GL_POLYGON);
+	glVertex2i(right - 1, top - 1);
+	glVertex2i(right - 1, bottom + 1);
+	glVertex2i(left + 1, bottom + 1);
+	glVertex2i(left + 1, top - 1);
+	glEnd();
+      }
 
     y = I->Block->rect.top - cControlTopMargin;
 
@@ -579,227 +639,492 @@ static void ControlDraw(Block * block)
 
       if((but_num == I->Active)) {
         draw_button(but_left, but_bottom,
-                    but_width, but_height, lightEdge, darkEdge, pushed);
-      } else if(((but_num == 6) && ((int) SettingGet(G, cSetting_seq_view))) ||
+                    but_width, but_height, lightEdge, darkEdge, pushed ORTHOCGOARGVAR);
+      } else if(((but_num == 6) && (SettingGetGlobal_b(G, cSetting_seq_view))) ||
                 ((but_num == 3) && (MoviePlaying(G))) ||
                 ((but_num == 7) && (SettingGetGlobal_b(G, cSetting_rock))) ||
                 ((but_num == 8) && (SettingGetGlobal_b(G, cSetting_full_screen)))) {
         draw_button(but_left, but_bottom,
-                    but_width, but_height, lightEdge, darkEdge, I->ActiveColor);
+                    but_width, but_height, lightEdge, darkEdge, I->ActiveColor ORTHOCGOARGVAR);
       } else {
         draw_button(but_left, but_bottom,
-                    but_width, but_height, lightEdge, darkEdge, I->ButtonColor);
+                    but_width, but_height, lightEdge, darkEdge, I->ButtonColor ORTHOCGOARGVAR);
       }
 
       if(control_width > 100) {
         x = but_left + (but_width - cControlBoxSize) / 2;
 
-        glColor3fv(I->Block->TextColor);
+	if (orthoCGO)
+	  CGOColorv(orthoCGO, I->Block->TextColor);
+	else
+	  glColor3fv(I->Block->TextColor);
         switch (but_num) {
         case 0:
-          glBegin(GL_TRIANGLES);
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - cControlInnerMargin);
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin);
-          glVertex2i(x + cControlInnerMargin, y - (cControlBoxSize / 2));
-          glEnd();
-          glBegin(GL_LINES);
-          glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin);
-          glVertex2i(x + cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin);
-          glEnd();
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLES);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		      y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - (cControlBoxSize / 2), 0.f);
+	    CGOEnd(orthoCGO);
+
+
+	    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin-1.f, y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin-1.f, y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_TRIANGLES);
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - cControlInnerMargin);
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin);
+	    glVertex2i(x + cControlInnerMargin, y - (cControlBoxSize / 2));
+	    glEnd();
+	    glBegin(GL_LINES);
+	    glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin);
+	    glVertex2i(x + cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin);
+	    glEnd();
+	  }
           break;
-
         case 1:
-
-          glBegin(GL_POLYGON);
-          glVertex2i(x + cControlBoxSize / 2 + 2, y - (cControlBoxSize / 2));
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - cControlInnerMargin);
-          glVertex2i(x + cControlInnerMargin, y - (cControlBoxSize / 2));
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin);
-          glEnd();
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLES);
+	    CGOVertex(orthoCGO, x + cControlBoxSize / 2 + 2, y - (cControlBoxSize / 2), 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		      y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - (cControlBoxSize / 2), 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - (cControlBoxSize / 2), 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		      y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlBoxSize / 2 + 2, y - (cControlBoxSize / 2), 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_POLYGON);
+	    glVertex2i(x + cControlBoxSize / 2 + 2, y - (cControlBoxSize / 2));
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - cControlInnerMargin);
+	    glVertex2i(x + cControlInnerMargin, y - (cControlBoxSize / 2));
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin);
+	    glEnd();
+	  }
           break;
         case 2:
-          glBegin(GL_POLYGON);
-          glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin);
-          glVertex2i(x + cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin);
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin);
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - cControlInnerMargin);
-          glEnd();
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_POLYGON);
+	    glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin);
+	    glVertex2i(x + cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin);
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin);
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - cControlInnerMargin);
+	    glEnd();
+	  }
           break;
-
         case 3:
-          glBegin(GL_TRIANGLES);
-          glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin + 1);
-          glVertex2i(x + cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin - 1);
-          glVertex2i(x + (cControlBoxSize) - cControlInnerMargin,
-                     y - (cControlBoxSize / 2));
-          glEnd();
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLES);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - cControlInnerMargin + 1, 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin,
+		      y - (cControlBoxSize - 1) + cControlInnerMargin - 1, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize) - cControlInnerMargin,
+		      y - (cControlBoxSize / 2), 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_TRIANGLES);
+	    glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin + 1);
+	    glVertex2i(x + cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin - 1);
+	    glVertex2i(x + (cControlBoxSize) - cControlInnerMargin,
+		       y - (cControlBoxSize / 2));
+	    glEnd();
+	  }
           break;
         case 4:
-          glBegin(GL_POLYGON);
-          glVertex2i(x + cControlBoxSize / 2 - 2, y - (cControlBoxSize / 2));
-          glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin);
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - (cControlBoxSize / 2));
-          glVertex2i(x + cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin);
-          glEnd();
-
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLES);
+	    CGOVertex(orthoCGO, x + cControlBoxSize / 2 - 2, y - (cControlBoxSize / 2), 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize / 2), 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize / 2), 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlBoxSize / 2 - 2, y - (cControlBoxSize / 2), 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_POLYGON);
+	    glVertex2i(x + cControlBoxSize / 2 - 2, y - (cControlBoxSize / 2));
+	    glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin);
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize / 2));
+	    glVertex2i(x + cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin);
+	    glEnd();
+	  }
           break;
         case 5:
-          glBegin(GL_TRIANGLES);
-          glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin);
-          glVertex2i(x + cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin);
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - (cControlBoxSize / 2));
-          glEnd();
-          glBegin(GL_LINES);
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - cControlInnerMargin);
-          glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
-                     y - (cControlBoxSize - 1) + cControlInnerMargin);
-          glEnd();
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLES);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin, y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + cControlInnerMargin,
+		      y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin,
+		      y - (cControlBoxSize / 2), 0.f);
+	    CGOEnd(orthoCGO);
+
+	    CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin, y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin - 1.f, y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin, y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize - 1) - cControlInnerMargin - 1.f, y - (cControlBoxSize - 1) + cControlInnerMargin, 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_TRIANGLES);
+	    glVertex2i(x + cControlInnerMargin, y - cControlInnerMargin);
+	    glVertex2i(x + cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin);
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize / 2));
+	    glEnd();
+	    glBegin(GL_LINES);
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - cControlInnerMargin);
+	    glVertex2i(x + (cControlBoxSize - 1) - cControlInnerMargin,
+		       y - (cControlBoxSize - 1) + cControlInnerMargin);
+	    glEnd();
+	  }
           break;
         case 6:
           TextDrawStrAt(G, "S", x + cControlInnerMargin,
-                        y - cControlBoxSize + cControlInnerMargin + 1);
+                        y - cControlBoxSize + cControlInnerMargin + 1 ORTHOCGOARGVAR);
           break;
         case 7:
-          /*
-             TextDrawStrAt(G,"R",x+cControlInnerMargin,
-             y-cControlBoxSize+cControlInnerMargin+1); */
-          glBegin(GL_POLYGON);
-          glVertex2i(x + (cControlBoxSize / 2) + cControlSpread, y - cControlInnerMargin);
-          glVertex2i(x + (cControlBoxSize / 2),
-                     y - (cControlBoxSize) + cControlInnerMargin);
-          glVertex2i(x + (cControlBoxSize / 2) - cControlSpread, y - cControlInnerMargin);
-          glEnd();
+	  if (orthoCGO){
+	    CGOBegin(orthoCGO, GL_TRIANGLES);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize / 2) + cControlSpread, y - cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize / 2),
+		      y - (cControlBoxSize) + cControlInnerMargin, 0.f);
+	    CGOVertex(orthoCGO, x + (cControlBoxSize / 2) - cControlSpread, y - cControlInnerMargin, 0.f);
+	    CGOEnd(orthoCGO);
+	  } else {
+	    glBegin(GL_POLYGON);
+	    glVertex2i(x + (cControlBoxSize / 2) + cControlSpread, y - cControlInnerMargin);
+	    glVertex2i(x + (cControlBoxSize / 2),
+		       y - (cControlBoxSize) + cControlInnerMargin);
+	    glVertex2i(x + (cControlBoxSize / 2) - cControlSpread, y - cControlInnerMargin);
+	    glEnd();
+	  }
           break;
         case 8:
+	  TextSetColor(G, I->Block->TextColor);
           TextDrawStrAt(G, "F", x + cControlInnerMargin,
-                        y - cControlBoxSize + cControlInnerMargin + 1);
+                        y - cControlBoxSize + cControlInnerMargin + 1 ORTHOCGOARGVAR);
           break;
         }
       }
     }
 #ifdef _MACPYMOL_XCODE
+    /* TODO: This code draws the bottom-right hand corner diagonal pattern to show
+       that the window is resizable.  It could be simplified greatly by using
+       one loop, instead of 3 separate blocks of code, one for each color */
     if((I->Block->rect.bottom==0) && (!SettingGetGlobal_b(G,cSetting_full_screen))) {
       int x1 = I->Block->rect.right + 1;
       int y1 = I->Block->rect.bottom - 1;
       int x2 = I->Block->rect.right - 3;
       int y2 = I->Block->rect.bottom - 5;
 
-      glColor3f(0.3F, 0.3F, 0.3F);
-      glBegin(GL_LINES);
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      glEnd();
-
+      if (orthoCGO){
+	CGOColor(orthoCGO, .3f, .3f, .3f);
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+      } else {
+	glColor3f(0.3F, 0.3F, 0.3F);
+	glBegin(GL_LINES);
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	glEnd();
+      }
       x1 = I->Block->rect.right + 1;
       y1 = I->Block->rect.bottom - 2;
       x2 = I->Block->rect.right - 2;
       y2 = I->Block->rect.bottom - 5;
 
-      glColor3f(0.85F, 0.85F, 0.85F);
-      glBegin(GL_LINES);
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      glEnd();
-
+      if (orthoCGO){
+	CGOColor(orthoCGO, .85f, .85f, .85f);
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+      } else {
+	glColor3f(0.85F, 0.85F, 0.85F);
+	glBegin(GL_LINES);
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	glEnd();
+      }
       x1 = I->Block->rect.right + 1;
       y1 = I->Block->rect.bottom - 3;
       x2 = I->Block->rect.right - 1;
       y2 = I->Block->rect.bottom - 5;
 
-      glColor3f(0.7F, 0.7F, 0.7F);
-      glBegin(GL_LINES);
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      x2 -= 4;
-      y1 += 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      y2 += 4;
-      x1 -= 4;
-      glVertex2i(x1, y1);
-      glVertex2i(x2, y2);
-      glEnd();
-
+      if (orthoCGO){
+	CGOColor(orthoCGO, .7f, .7f, .7f);
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1, y1-1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2-1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOEnd(orthoCGO);
+	x2 -= 4;
+	y1 += 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+	y2 += 4;
+	x1 -= 4;
+	CGOBegin(orthoCGO, GL_TRIANGLE_STRIP);
+	CGOVertex(orthoCGO, x1-1, y1, 0.f);
+	CGOVertex(orthoCGO, x1, y1, 0.f);
+	CGOVertex(orthoCGO, x2, y2, 0.f);
+	CGOVertex(orthoCGO, x2+1, y2, 0.f);
+	CGOEnd(orthoCGO);
+      } else {
+	glColor3f(0.7F, 0.7F, 0.7F);
+	glBegin(GL_LINES);
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	x2 -= 4;
+	y1 += 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	y2 += 4;
+	x1 -= 4;
+	glVertex2i(x1, y1);
+	glVertex2i(x2, y2);
+	glEnd();
+      }
     }
 #endif
+    }
   }
 }
 

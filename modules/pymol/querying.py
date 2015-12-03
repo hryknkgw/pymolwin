@@ -84,30 +84,20 @@ if __name__=='pymol.querying':
         r = DEFAULT_ERROR        
         # should replace this with a C function
         try:
+            # remove non-safe chars
+            prefix = _self.get_legal_name(prefix)
+
             _self.lock(_self)  
-            avoid_dict = {}
-            for name in _self.get_names('all'):
-                avoid_dict[name] = None
-            if alwaysnumber or avoid_dict.has_key(prefix):
+            avoid_set = set(_self.get_names('all'))
+            if alwaysnumber or prefix in avoid_set:
                 counter = 1
                 while 1:
                     r = prefix + "%02d"%counter
-                    if not avoid_dict.has_key(r):
+                    if r not in avoid_set:
                         break
                     counter = counter + 1
             else:
                 r=prefix
-
-            # safe names....
-            safe_chars = range(48,58)
-            safe_chars.extend(range(65,91))
-            safe_chars.extend(range(97,123))
-            safe_chars.extend([ord('+'),ord('-'),ord('_'),ord('.')])
-            # remove non-safe chars
-            for c in range(len(r)):
-                if ord(r[c]) not in safe_chars:
-                    r = r[:c] + "_" + r[c+1:]
-
         finally:
             _self.unlock(r,_self)
         return r
@@ -130,7 +120,7 @@ if __name__=='pymol.querying':
             _self.unlock(r,_self)
         return r
 
-    def get_object_matrix(object,state=1,_self=cmd):
+    def get_object_matrix(object,state=1, incl_ttt=1, _self=cmd):
         '''
 DESCRIPTION
 
@@ -142,7 +132,7 @@ DESCRIPTION
         object = str(object)
         try:
             _self.lock(_self)   
-            r = _cmd.get_object_matrix(_self._COb,str(object), int(state)-1)
+            r = _cmd.get_object_matrix(_self._COb,str(object), int(state)-1, int(incl_ttt))
         finally:
             _self.unlock(r,_self)
         if _raising(r,_self): raise pymol.CmdException
@@ -170,13 +160,12 @@ DESCRIPTION
         if _raising(r,_self): raise pymol.CmdException
         return r
 
-    def get_symmetry(selection="(all)",quiet=1,_self=cmd):
+    def get_symmetry(selection="(all)",state=-1,quiet=1,_self=cmd):
         '''
 DESCRIPTION
 
     "get_symmetry" can be used to obtain the crystal
-    and spacegroup parameters for a molecule
-    (FUTURE - map object - FUTURE)
+    and spacegroup parameters for a molecule or map.
 
 USAGE
 
@@ -184,7 +173,7 @@ USAGE
 
 PYMOL API
 
-    cmd.get_symmetry(string selection)
+    cmd.get_symmetry(string selection, int state, int quiet)
 
 
         '''
@@ -192,7 +181,7 @@ PYMOL API
         selection = selector.process(selection)
         try:
             _self.lock(_self)
-            r = _cmd.get_symmetry(_self._COb,str(selection))
+            r = _cmd.get_symmetry(_self._COb,str(selection),int(state))
             if not quiet:
                 if(is_list(r)):
                     if(len(r)):
@@ -626,7 +615,7 @@ PYMOL API
         else:
             if not quiet:
                 if _feedback(fb_module.cmd,fb_mask.results,_self):
-                    print " version: %s (%8.6f) %d"%r
+                    print " version: %s (%2.3f) %d"%r
         return r
     
     def get_vrml(version=2,_self=cmd): 
@@ -1189,7 +1178,12 @@ NOTES
     "object:molecule"
     "object:map"
     "object:mesh"
-    "object:distance"
+    "object:slice"
+    "object:surface"
+    "object:measurement"
+    "object:cgo"
+    "object:group"
+    "object:volume"
     "selection"
 
 SEE ALSO
@@ -1203,8 +1197,8 @@ SEE ALSO
         finally:
             _self.unlock(r,_self)
         if is_error(r):
-            if _feedback(fb_module.cmd,fb_mask.errors,_self):      
-                print "cmd-Error: unrecognized name."
+            if not quiet and _feedback(fb_module.cmd,fb_mask.errors,_self):      
+                print "Cmd-Error: unrecognized name."
         elif not quiet:
             print r
         if _raising(r,_self): raise pymol.CmdException
@@ -1321,8 +1315,29 @@ NOTE
         '''
 DESCRIPTION
 
-    "find_pairs" is currently undocumented.
+    API only function. Returns a list of atom pairs. Atoms are represented as
+    (model,index) tuples.
 
+    Can be restricted to hydrogen-bonding-like contacts. WARNING: Only checks
+    atom orientation, not atom type (so would hydrogen bond between carbons for
+    example), so make sure to provide appropriate atom selections.
+
+ARGUMENTS
+
+    selection1, selection2 = string: atom selections
+
+    state1, state2 = integer: state-index (only positive values allowed) {default: 1}
+
+    cutoff = float: distance cutoff {default: 3.5}
+
+    mode = integer: if mode=1, do coarse hydrogen bonding assessment {default: 0}
+
+    angle = float: hydrogen bond angle cutoff, only if mode=1 {default: 45.0}
+
+NOTE
+
+    Although this does a similar job like "distance", it uses a completely
+    different routine and the "mode" argument has different meanings!
         '''
         # preprocess selection
         selection1 = selector.process(selection1)
@@ -1428,10 +1443,28 @@ PYMOL API
         if _raising(r,_self): raise pymol.CmdException
         return r
 
-    def get_names_of_type(type,_self=cmd):
-        obj = _self.get_names('objects')
-        types = map(get_type,obj)
-        mix = map(None,obj,types)
+    def get_names_of_type(type,public=1,_self=cmd):
+        """
+DESCRIPTION
+
+    "get_names_of_type" will return a list of names for the given type.
+
+        """
+        obj_type = "public_objects" if public==1 else "objects"
+        types = []
+        mix = []
+        obj = None
+        try:
+            obj = _self.get_names(obj_type)
+        except:
+            pass
+    
+        if obj:
+            try:
+                types = map(_self.get_type,obj)
+                mix = map(None,obj,types)
+            except:
+                pass
         lst = []
         for a in mix:
             if a[1]==type:
@@ -1459,5 +1492,33 @@ PYMOL API
         if _raising(r,_self): raise pymol.CmdException
         return r
 
+    def get_object_state(name):
+        '''
+DESCRIPTION
+
+    Returns the effective object state.
+        '''
+        states = cmd.count_states(name)
+        if states < 2 and cmd.get_setting_boolean('static_singletons'):
+            return 1
+        state = cmd.get_setting_int('state', name)
+        if state > states:
+            raise pymol.CmdException('Invalid state %d for object %s' % (state, name))
+        return state
+
+    def get_selection_state(selection):
+        '''
+DESCRIPTION
+
+    Returns the effective object state for all objects in given selection.
+    Raises exception if objects are in different states.
+        '''
+        state_set = set(map(get_object_state,
+            cmd.get_object_list('(' + selection + ')')))
+        if len(state_set) != 1:
+            if len(state_set) == 0:
+                return 1
+            raise pymol.CmdException('Selection spans multiple object states')
+        return state_set.pop()
 
 

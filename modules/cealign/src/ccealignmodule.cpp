@@ -39,15 +39,15 @@ double** calcDM(pcePoint coords, int len)
   int i = 0;
 
   double** dm = (double**) malloc(sizeof(double*)*len);
-  for ( i = 0; i < len; i++ )
+  for (i = 0; i < len; i++)
     dm[i] = (double*) malloc( sizeof(double)*len);
 
   int row=0, col=0;
-  for ( row = 0; row < len; row++ ) {
-    for ( col = 0; col < len; col++ ) {
-      dm[row][col] = sqrt( pow( coords[row].x - coords[col].x ,2) +
-			   pow(coords[row].y - coords[col].y,2) +
-			   pow(coords[row].z - coords[col].z,2) );
+  for (row = 0; row < len; row++) {
+    for (col = 0; col < len; col++) {
+      dm[row][col] = sqrt(pow(coords[row].x - coords[col].x,2) +
+			  pow(coords[row].y - coords[col].y,2) +
+			  pow(coords[row].z - coords[col].z,2) );
     }
   }
   return dm;
@@ -59,9 +59,9 @@ double** calcS(double** d1, double** d2, int lenA, int lenB, int wSize)
   double winSize = (double) wSize;
   // initialize the 2D similarity matrix
   double** S = (double**) malloc(sizeof(double*)*lenA);
-  for ( i = 0; i < lenA; i++ )
+  for (i = 0; i < lenA; i++)
     S[i] = (double*) malloc( sizeof(double)*lenB);
-
+  
   double sumSize = (winSize-1.0)*(winSize-2.0) / 2.0;
   //
   // This is where the magic of CE comes out.  In the similarity matrix,
@@ -70,23 +70,23 @@ double** calcS(double** d1, double** d2, int lenA, int lenB, int wSize)
   // B.  A value of 0 means absolute match; a value >> 1 means bad match.
   //
   int iA, iB, row, col;
-  for ( iA = 0; iA < lenA; iA++ ) {
-    for ( iB = 0; iB < lenB; iB++ ) {
+  for (iA = 0; iA < lenA; iA++) {
+    for (iB = 0; iB < lenB; iB++) {
       S[iA][iB] = -1.0;
-      if ( iA > lenA - wSize || iB > lenB - wSize )
+      if (iA > lenA - wSize || iB > lenB - wSize)
 	continue;
 		
       double score = 0.0;
 
       //
       // We always skip the calculation of the distance from THIS
-      // residues, to the next residue.  This is a time-saving heur-
+      // residue, to the next residue.  This is a time-saving heur-
       // istic decision.  Almost all alpha carbon bonds of neighboring
       // residues is 3.8 Angstroms.  Due to entropy, S = -k ln pi * pi,
       // this tell us nothing, so it doesn't help so ignore it.
       //
-      for ( row = 0; row <  wSize - 2; row++ ) {
-	for ( col = row + 2; col <  wSize; col++ ) {
+      for (row = 0; row <  wSize - 2; row++) {
+	for (col = row + 2; col <  wSize; col++) {
 	  score += fabs( d1[iA+row][iA+col] - d2[iB+row][iB+col] );
 	}
       }
@@ -99,7 +99,7 @@ double** calcS(double** d1, double** d2, int lenA, int lenB, int wSize)
 
 
 
-pcePoint getCoords( PyObject* L, int length )
+pcePoint getCoords(PyObject* L, int length)
 {
   // make space for the current coords
   pcePoint coords = (pcePoint) malloc(sizeof(cePoint)*length);
@@ -137,13 +137,10 @@ pcePoint getCoords( PyObject* L, int length )
 
 
 
-pathCache findPath( double** S, double** dA, double** dB, int lenA, int lenB, int winSize, int * bufferSize )
+pathCache findPath( double** S, double** dA, double** dB, int lenA, int lenB, float D0, float D1, int winSize, int gapMax, int * bufferSize )
 {
   // CE-specific cutoffs
-  const double D0 = 3.0;
-  const double D1 = 4.0;
   const int MAX_KEPT = 20;
-  const int gapMax = 30;
 
   // the best Path's score
   double bestPathScore = 1e6;
@@ -153,10 +150,7 @@ pathCache findPath( double** S, double** dA, double** dB, int lenA, int lenB, in
   int smaller = ( lenA < lenB ) ? lenA : lenB;
   int winSum = (winSize-1)*(winSize-2)/2;
 
-  //
-  // BEST PATH
-  //
-  path bestPath = (path) malloc( sizeof(afp)*smaller );
+  path bestPath = (path) malloc(sizeof(afp)*smaller);
 
   // index variable for below
   int i, j;
@@ -262,7 +256,8 @@ pathCache findPath( double** S, double** dA, double** dB, int lenA, int lenB, in
 	  // the S, matrix.
 					
 	  // 1st: If jA and jB are at the end of the matrix
-	  if ( jA > lenA-winSize-1 || jB > lenB-winSize-1 ){
+	  if ( jA > lenA-winSize || jB > lenB-winSize ){
+	    // FIXME, was: jA > lenA-winSize-1 || jB > lenB-winSize-1
 	    continue;
 	  }
 	  // 2nd: If this gapped octapeptide is bad, ignore it.
@@ -429,6 +424,7 @@ PyObject* findBest( pcePoint coordsA, pcePoint coordsB, pathCache paths, int buf
   TA2<double> bestU;
   TA1<double> bestCOM1, bestCOM2;
   int bestLen = 0;
+  int bestO = -1;
 	
   // loop through the buffer
   for ( int o = 0; o < bufferSize; o++ ) {
@@ -444,11 +440,16 @@ PyObject* findBest( pcePoint coordsA, pcePoint coordsB, pathCache paths, int buf
       // rebuild the coordinate lists for this path
       if ( paths[o][j].first != -1 )
 	{
-	  int k = 0;
-	  while ( k++ < winSize )
+	  for ( int k = 0; k < winSize; k++ )
 	    {
-	      double t1[] = { coordsA[ paths[o][j].first +k ].x, coordsA[ paths[o][j].first +k ].y, coordsA[ paths[o][j].first +k ].z };
-	      double t2[] = { coordsB[ paths[o][j].second+k ].x, coordsB[ paths[o][j].second+k ].y, coordsB[ paths[o][j].second+k ].z };
+	      double t1[] = { coordsA[ paths[o][j].first +k ].x, 
+			      coordsA[ paths[o][j].first +k ].y, 
+			      coordsA[ paths[o][j].first +k ].z };
+
+	      double t2[] = { coordsB[ paths[o][j].second+k ].x, 
+			      coordsB[ paths[o][j].second+k ].y, 
+			      coordsB[ paths[o][j].second+k ].z };
+
 	      for ( int d = 0; d < c1.dim2(); d++ ) {
 		c1[it][d] =  t1[d];
 		c2[it][d] =  t2[d];
@@ -572,7 +573,7 @@ PyObject* findBest( pcePoint coordsA, pcePoint coordsB, pathCache paths, int buf
     // Now calculate the RMSD	
     //	
     double sig = 0.0;
-    for ( int i = 0; i < n; i++ )
+    for ( int i = 0; i < (int) n; i++ )
       sig += sigmas[i];
 		
     double curRMSD = sqrt(fabs((E0 - 2*sig) / (double) m ));
@@ -586,9 +587,8 @@ PyObject* findBest( pcePoint coordsA, pcePoint coordsB, pathCache paths, int buf
       bestCOM1 = c1COM.copy();
       bestCOM2 = c2COM.copy();
       bestLen = curLen;
+      bestO = o;
     }
-
-    o++;
   }
 
   if ( bestRMSD == 1e6 ) {
@@ -598,38 +598,43 @@ PyObject* findBest( pcePoint coordsA, pcePoint coordsB, pathCache paths, int buf
 	
   // list of list of pairs	
   PyObject* rVal = PyList_New(0);
-  // Py_INCREF(rVal);
 
   PyObject* pyRMSD = Py_BuildValue( "f", bestRMSD );
-  // Py_INCREF(pyRMSD);
 
   PyObject* pyAliLen = Py_BuildValue( "i", bestLen );
-  // Py_INCREF(pyAliLen);
 
   PyObject* pyU = Py_BuildValue( "[f,f,f,f, f,f,f,f, f,f,f,f, f,f,f,f]",
 				 bestU[0][0], bestU[1][0], bestU[2][0], bestCOM1[0],
 				 bestU[0][1], bestU[1][1], bestU[2][1], bestCOM1[1],
 				 bestU[0][2], bestU[1][2], bestU[2][2], bestCOM1[2],
 				 -bestCOM2[0], -bestCOM2[1], -bestCOM2[2], 1.);
-  // Py_INCREF(pyU);
 	
+  PyObject* pyPathA = PyList_New(0);
+  PyObject* pyPathB = PyList_New(0);
+  for (int j = 0; j < smaller && paths[bestO][j].first != -1; j++) {
+    PyList_Append(pyPathA, Py_BuildValue("i", paths[bestO][j].first));
+    PyList_Append(pyPathB, Py_BuildValue("i", paths[bestO][j].second));
+  }
+
   PyList_Append(rVal, pyAliLen);
   PyList_Append(rVal, pyRMSD);
   PyList_Append(rVal, pyU );
+  PyList_Append(rVal, pyPathA );
+  PyList_Append(rVal, pyPathB );
 
   return (PyObject*) rVal;
 }
 
 
-TA2<double> transpose( const TA2<double>& v )
+TA2<double> transpose(const TA2<double>& v)
 {
-  unsigned int m = v.dim1();
-  unsigned int n = v.dim2();
+  int m = (int) v.dim1();
+  int n = (int) v.dim2();
 	
   TA2<double> rVal(n,m);
 	
-  for ( unsigned int i = 0; i < m; i++ )
-    for ( unsigned int j = 0; j < n; j++ )
+  for ( int i = 0; i < m; i++ )
+    for ( int j = 0; j < n; j++ )
       rVal[j][i] = v[i][j];
 		
   return rVal;

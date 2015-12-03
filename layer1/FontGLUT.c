@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include "os_gl.h"
 #include "Base.h"
@@ -54,7 +55,7 @@ static void FontGLUTRestore(CFontGLUT * I)
 }
 
 static char *FontGLUTRenderOpenGL(RenderInfo * info, CFontGLUT * I, char *st, float size,
-                                  float *rpos)
+                                  float *rpos SHADERCGOARG)
 {
   register PyMOLGlobals *G = I->Font.G;
   if(G->ValidContext) {
@@ -62,7 +63,7 @@ static char *FontGLUTRenderOpenGL(RenderInfo * info, CFontGLUT * I, char *st, fl
     FontGLUTBitmapFontRec *font_info = I->glutFont;
     int first, last;
     FontGLUTBitmapCharRec const *ch;
-    int textured = SettingGetGlobal_b(G, cSetting_texture_fonts);
+    int textured = true && SHADERCGOARGV;
     int pushed = OrthoGetPushed(G);
     int sampling = 1;
     const float _0 = 0.0F, _1 = 1.0F, _m1 = -1.0F;
@@ -70,9 +71,6 @@ static char *FontGLUTRenderOpenGL(RenderInfo * info, CFontGLUT * I, char *st, fl
 
     if(info)
       sampling = info->sampling;
-
-    if(sampling > 1)
-      textured = true;
 
     if(st && (*st)) {
 
@@ -184,6 +182,7 @@ static char *FontGLUTRenderOpenGL(RenderInfo * info, CFontGLUT * I, char *st, fl
 
       if(!textured) {
         glColor3fv(TextGetColor(G));
+
         glRasterPos4fv(TextGetPos(G));
         FontGLUTSave(I);
       }
@@ -196,6 +195,7 @@ static char *FontGLUTRenderOpenGL(RenderInfo * info, CFontGLUT * I, char *st, fl
           if(ch) {
             if(!textured) {
 
+	      /* NEED TODO FOR _PYMOL_GL_DRAWARRAYS */
               glBitmap(ch->width, ch->height,
                        ch->xorig, ch->yorig, ch->advance, 0, ch->bitmap);
               TextAdvance(G, ch->advance);
@@ -219,7 +219,7 @@ static char *FontGLUTRenderOpenGL(RenderInfo * info, CFontGLUT * I, char *st, fl
                                               (float) ch->advance, &fprnt, sampling);
                 }
                 if(id) {
-                  CharacterRenderOpenGL(G, info, id);   /* handles advance */
+                  CharacterRenderOpenGL(G, info, id, false SHADERCGOARGVAR);   /* handles advance */
                 }
               }
             }

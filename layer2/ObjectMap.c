@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_predef.h"
 #include"os_std.h"
@@ -454,7 +455,7 @@ static int ObjectMapStateTrim(PyMOLGlobals * G, ObjectMapState * ms,
       tst[0] = (a & 0x1) ? mn[0] : mx[0];
       tst[1] = (a & 0x2) ? mn[1] : mx[1];
       tst[2] = (a & 0x4) ? mn[2] : mx[2];
-      transform33f3f(ms->Crystal->RealToFrac, tst, frac_tst);
+      transform33f3f(ms->Symmetry->Crystal->RealToFrac, tst, frac_tst);
       if(!a) {
         copy3f(frac_tst, frac_mn);
         copy3f(frac_tst, frac_mx);
@@ -537,13 +538,13 @@ static int ObjectMapStateTrim(PyMOLGlobals * G, ObjectMapState * ms,
       v[1] = (ms->Min[1]) / ((float) ms->Div[1]);
       v[0] = (ms->Min[0]) / ((float) ms->Div[0]);
 
-      transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMin);
+      transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMin);
 
       v[2] = ((ms->FDim[2] - 1) + ms->Min[2]) / ((float) ms->Div[2]);
       v[1] = ((ms->FDim[1] - 1) + ms->Min[1]) / ((float) ms->Div[1]);
       v[0] = ((ms->FDim[0] - 1) + ms->Min[0]) / ((float) ms->Div[0]);
 
-      transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMax);
+      transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMax);
 
       /* new corner */
       {
@@ -555,7 +556,7 @@ static int ObjectMapStateTrim(PyMOLGlobals * G, ObjectMapState * ms,
             v[1] = (b + ms->Min[1]) / ((float) ms->Div[1]);
             for(a = 0; a < ms->FDim[0]; a += (ms->FDim[0] - 1)) {
               v[0] = (a + ms->Min[0]) / ((float) ms->Div[0]);
-              transform33f3f(ms->Crystal->FracToReal, v, vv);
+              transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vv);
               copy3f(vv, ms->Corner + 3 * d);
               d++;
             }
@@ -702,7 +703,7 @@ static int ObjectMapStateDouble(PyMOLGlobals * G, ObjectMapState * ms)
         y = (b & 0x1) ? 0.5F : 0.0F;
         for(a = 0; a < fdim[0]; a++) {
           v[0] = (a + min[0]) / ((float) div[0]);
-          transform33f3f(ms->Crystal->FracToReal, v, vr);
+          transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
           x = (a & 0x1) ? 0.5F : 0.0F;
           vt = F4Ptr(field->points, a, b, c, 0);
           copy3f(vr, vt);
@@ -846,7 +847,7 @@ static int ObjectMapStateHalve(PyMOLGlobals * G, ObjectMapState * ms, int smooth
             a_2 = old_max[0] - 1;
             x = (v[0] - ((a_2 + old_min[0]) / (float) old_div[0])) * old_div[0];
           }
-          transform33f3f(ms->Crystal->FracToReal, v, vr);
+          transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
           vt = F4Ptr(field->points, a, b, c, 0);
           copy3f(vr, vt);
           F3(field->data, a, b, c) = FieldInterpolatef(ms->Field->data,
@@ -869,13 +870,13 @@ static int ObjectMapStateHalve(PyMOLGlobals * G, ObjectMapState * ms, int smooth
     v[1] = (ms->Min[1]) / ((float) ms->Div[1]);
     v[0] = (ms->Min[0]) / ((float) ms->Div[0]);
 
-    transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMin);
+    transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMin);
 
     v[2] = ((ms->FDim[2] - 1) + ms->Min[2]) / ((float) ms->Div[2]);
     v[1] = ((ms->FDim[1] - 1) + ms->Min[1]) / ((float) ms->Div[1]);
     v[0] = ((ms->FDim[0] - 1) + ms->Min[0]) / ((float) ms->Div[0]);
 
-    transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMax);
+    transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMax);
 
     /* new corner */
     {
@@ -888,7 +889,7 @@ static int ObjectMapStateHalve(PyMOLGlobals * G, ObjectMapState * ms, int smooth
           v[1] = (b + ms->Min[1]) / ((float) ms->Div[1]);
           for(a = 0; a < ms->FDim[0]; a += (ms->FDim[0] - 1)) {
             v[0] = (a + ms->Min[0]) / ((float) ms->Div[0]);
-            transform33f3f(ms->Crystal->FracToReal, v, vv);
+            transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vv);
             copy3f(vv, ms->Corner + 3 * d);
             d++;
           }
@@ -1015,7 +1016,7 @@ int ObjectMapStateContainsPoint(ObjectMapState * ms, float *point)
   if(ObjectMapStateValidXtal(ms)) {
     float frac[3];
 
-    transform33f3f(ms->Crystal->RealToFrac, point, frac);
+    transform33f3f(ms->Symmetry->Crystal->RealToFrac, point, frac);
 
     x = (ms->Div[0] * frac[0]);
     y = (ms->Div[1] * frac[1]);
@@ -1071,7 +1072,7 @@ int ObjectMapStateInterpolate(ObjectMapState * ms, float *array, float *result, 
 
     while(n--) {
       /* get the fractional coordinate */
-      transform33f3f(ms->Crystal->RealToFrac, inp, frac);
+      transform33f3f(ms->Symmetry->Crystal->RealToFrac, inp, frac);
 
       inp += 3;
 
@@ -1230,6 +1231,13 @@ static int ObjectMapNumPyArrayToMapState(PyMOLGlobals * G, ObjectMapState * I,
                                          PyObject * ary, int quiet);
 #endif
 
+void ObjectMapRegeneratePoints(ObjectMap * om){
+  int i;
+  for (i=0; i<om->NState;i++){
+    ObjectMapStateRegeneratePoints(om->State + i);
+  }
+}
+
 void ObjectMapStateRegeneratePoints(ObjectMapState * ms)
 {
   int a, b, c, e;
@@ -1242,7 +1250,7 @@ void ObjectMapStateRegeneratePoints(ObjectMapState * ms)
         v[1] = (b + ms->Min[1]) / ((float) ms->Div[1]);
         for(a = 0; a < ms->FDim[0]; a++) {
           v[0] = (a + ms->Min[0]) / ((float) ms->Div[0]);
-          transform33f3f(ms->Crystal->FracToReal, v, vr);
+          transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
           for(e = 0; e < 3; e++)
             F4(ms->Field->points, a, b, c, e) = vr[e];
         }
@@ -1271,8 +1279,8 @@ static PyObject *ObjectMapStateAsPyList(ObjectMapState * I)
 
   result = PyList_New(16);
   PyList_SetItem(result, 0, PyInt_FromLong(I->Active));
-  if(I->Crystal) {
-    PyList_SetItem(result, 1, CrystalAsPyList(I->Crystal));
+  if(I->Symmetry) {
+    PyList_SetItem(result, 1, SymmetryAsPyList(I->Symmetry));
   } else {
     PyList_SetItem(result, 1, PConvAutoNone(Py_None));
   }
@@ -1308,19 +1316,6 @@ static PyObject *ObjectMapStateAsPyList(ObjectMapState * I)
 
   PyList_SetItem(result, 14, IsosurfAsPyList(I->Field));
   PyList_SetItem(result, 15, ObjectStateAsPyList(&I->State));
-#if 0
-  int Active;
-  CCrystal *Crystal;
-  int Div[3], Min[3], Max[3], FDim[4];
-  Isofield *Field;
-  float Corner[24];
-  int *Dim;
-  float *Origin;
-  float *Range;
-  float *Grid;
-  float ExtentMin[3], ExtentMax[3];
-#endif
-
   return (PConvAutoNone(result));
 }
 #endif
@@ -1348,10 +1343,15 @@ static int ObjectMapStateCopy(PyMOLGlobals * G, ObjectMapState * src, ObjectMapS
     I->Active = src->Active;
     if(I->Active) {
 
-      if(src->Crystal)
-        I->Crystal = CrystalCopy(src->Crystal);
+      /* if(src->Symmetry->Crystal) */
+      /*   I->Symmetry->Crystal = CrystalCopy(src->Symmetry->Crystal); */
+      /* else */
+      /*   I->Symmetry->Crystal = NULL; */
+
+      if(src->Symmetry)
+	I->Symmetry = SymmetryCopy(src->Symmetry);
       else
-        I->Crystal = NULL;
+	I->Symmetry = NULL;
 
       if(src->Origin) {
         I->Origin = Alloc(float, 3);
@@ -1438,9 +1438,9 @@ static int ObjectMapStateFromPyList(PyMOLGlobals * G, ObjectMapState * I, PyObje
       if(ok) {
         tmp = PyList_GetItem(list, 1);
         if(tmp == Py_None)
-          I->Crystal = NULL;
+          I->Symmetry = NULL;
         else
-          ok = ((I->Crystal = CrystalNewFromPyList(G, tmp)) != NULL);
+          ok = ((I->Symmetry = SymmetryNewFromPyList(G, tmp)) != NULL);
       }
       if(ok) {
         tmp = PyList_GetItem(list, 2);
@@ -1760,7 +1760,12 @@ void ObjectMapStatePurge(PyMOLGlobals * G, ObjectMapState * I)
   FreeP(I->Dim);
   FreeP(I->Range);
   FreeP(I->Grid);
-  OOFreeP(I->Crystal);
+
+  if(I->Symmetry) {
+    SymmetryFree(I->Symmetry);
+    I->Symmetry = NULL;
+  }
+
   I->Active = false;
 }
 
@@ -1850,6 +1855,65 @@ static void ObjectMapRender(ObjectMap * I, RenderInfo * info)
           } else {
             ObjectUseColor(&I->Obj);
             glDisable(GL_LIGHTING);
+#ifdef _PYMOL_GL_DRAWARRAYS
+	    {
+	      GLfloat vertexVals [24*3];
+	      float *tmp_ptr;
+	      int pl = 0;
+	      tmp_ptr = corner + 3 * 0;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 1;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 0;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 2;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 2;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 3;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 1;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 3;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 0;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 4;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 1;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 5;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 2;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 6;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 3;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 7;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 4;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 5;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 4;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 6;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 6;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 7;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 5;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      tmp_ptr = corner + 3 * 7;
+	      vertexVals[pl++] = tmp_ptr[0]; vertexVals[pl++] = tmp_ptr[1]; vertexVals[pl++] = tmp_ptr[2];
+	      glEnableClientState(GL_VERTEX_ARRAY);
+	      glVertexPointer(3, GL_FLOAT, 0, vertexVals);
+	      glDrawArrays(GL_LINES, 0, 24);	      
+	      glDisableClientState(GL_VERTEX_ARRAY);
+	    }
+#else
             glBegin(GL_LINES);
             glVertex3fv(corner + 3 * 0);
             glVertex3fv(corner + 3 * 1);
@@ -1888,6 +1952,7 @@ static void ObjectMapRender(ObjectMap * I, RenderInfo * info)
             glVertex3fv(corner + 3 * 7);
 
             glEnd();
+#endif
             glEnable(GL_LIGHTING);
           }
         }
@@ -1975,6 +2040,83 @@ static void ObjectMapRender(ObjectMap * I, RenderInfo * info)
 
                   glPointSize(width);
                   glDisable(GL_POINT_SMOOTH);
+#ifdef _PYMOL_GL_DRAWARRAYS
+		  {
+		    float *init_raw_data = raw_data;
+		    int nverts = 0;
+		    {
+		      for(a = 0; a < cnt; a++) {
+			register float f_val = *(raw_data++);
+			if(f_val >= high_cut || f_val <= low_cut) {
+			  nverts++;
+			}
+		      }
+		    }
+		    raw_data = init_raw_data;
+		    {
+		      int pl = 0, plc = 0;
+		      ALLOCATE_ARRAY(GLfloat,ptsVals,nverts*3)
+		      ALLOCATE_ARRAY(GLfloat,colorVals,nverts*4)
+		      ALLOCATE_ARRAY(GLfloat,normalVals,nverts*3)
+
+		      ObjectUseColor(&I->Obj);
+
+		      for(a = 0; a < cnt; a++) {
+			register float f_val = *(raw_data++);
+			if(f_val >= high_cut) {
+			  if(raw_gradient) {
+			    normalize23f(raw_gradient, gt);
+			    invert3f(gt);
+			    normalVals[pl] = gt[0]; normalVals[pl+1] = gt[1]; normalVals[pl+2] = gt[2];
+			  }
+			  if(ramped) {
+			    ColorGetRamped(G, color, raw_point, vc, state);
+			    colorVals[plc] = vc[0]; colorVals[plc+1] = vc[1]; colorVals[plc+2] = vc[2]; colorVals[plc+3] = 1.f;
+			  }
+			  ptsVals[pl] = raw_point[0]; ptsVals[pl+1] = raw_point[1]; ptsVals[pl+2] = raw_point[2];
+			} else if(f_val <= low_cut) {
+			  if(raw_gradient) {
+			    normalize23f(raw_gradient, gt);
+			    normalVals[pl] = gt[0]; normalVals[pl+1] = gt[1]; normalVals[pl+2] = gt[2];
+			  }
+			  if(ramped) {
+			    ColorGetRamped(G, color, raw_point, vc, state);
+			    colorVals[plc] = vc[0]; colorVals[plc+1] = vc[1]; colorVals[plc+2] = vc[2]; colorVals[plc+3] = 1.f;
+			  }
+			}
+			if(raw_gradient)
+			  raw_gradient += 3;
+			raw_point += 3;
+			pl += 3;
+			plc += 4;
+		      }
+		      
+		      glEnableClientState(GL_VERTEX_ARRAY);
+		      if (ramped){
+			glEnableClientState(GL_COLOR_ARRAY);
+		      }
+		      if (raw_gradient){
+			glEnableClientState(GL_NORMAL_ARRAY);
+			glNormalPointer(GL_FLOAT, 0, normalVals);
+		      }
+		      glVertexPointer(3, GL_FLOAT, 0, ptsVals);
+		      if (ramped){
+			glColorPointer(4, GL_FLOAT, 0, colorVals);
+		      }
+		      glDrawArrays(GL_POINTS, 0, nverts);
+		      glDisableClientState(GL_VERTEX_ARRAY);
+		      if (ramped){
+			glDisableClientState(GL_COLOR_ARRAY);
+		      }
+		      if (raw_gradient){
+			glDisableClientState(GL_NORMAL_ARRAY);
+		      }
+		      DEALLOCATE_ARRAY(ptsVals)
+		      DEALLOCATE_ARRAY(colorVals)
+		      DEALLOCATE_ARRAY(normalVals)
+		    }
+		  }		    
+#else
                   glBegin(GL_POINTS);
                   ObjectUseColor(&I->Obj);
                   for(a = 0; a < cnt; a++) {
@@ -2006,8 +2148,9 @@ static void ObjectMapRender(ObjectMap * I, RenderInfo * info)
                     raw_point += 3;
                   }
                   glEnd();
-                }
+#endif
                 glEnable(GL_POINT_SMOOTH);
+                }
               }
             }
           }
@@ -2021,7 +2164,7 @@ void ObjectMapStateInit(PyMOLGlobals * G, ObjectMapState * I)
 {
   ObjectMapStatePurge(G, I);
   ObjectStateInit(G, &I->State);
-  I->Crystal = CrystalNew(G);
+  I->Symmetry = SymmetryNew(G);
   I->Field = NULL;
   I->Origin = NULL;
   I->Dim = NULL;
@@ -2269,7 +2412,7 @@ static int ObjectMapCCP4StrToMap(ObjectMap * I, char *CCP4Str, int bytes, int st
   ms = &I->State[state];
   ObjectMapStateInit(I->Obj.G, ms);
 
-  normalize = (int) SettingGet(I->Obj.G, cSetting_normalize_ccp4_maps);
+  normalize = SettingGetGlobal_b(I->Obj.G, cSetting_normalize_ccp4_maps);
   maxd = -FLT_MAX;
   mind = FLT_MAX;
   p = CCP4Str;
@@ -2483,13 +2626,13 @@ static int ObjectMapCCP4StrToMap(ObjectMap * I, char *CCP4Str, int bytes, int st
     }
   }
 
-  ms->Crystal->Dim[0] = xlen;
-  ms->Crystal->Dim[1] = ylen;
-  ms->Crystal->Dim[2] = zlen;
+  ms->Symmetry->Crystal->Dim[0] = xlen;
+  ms->Symmetry->Crystal->Dim[1] = ylen;
+  ms->Symmetry->Crystal->Dim[2] = zlen;
 
-  ms->Crystal->Angle[0] = alpha;
-  ms->Crystal->Angle[1] = beta;
-  ms->Crystal->Angle[2] = gamma;
+  ms->Symmetry->Crystal->Angle[0] = alpha;
+  ms->Symmetry->Crystal->Angle[1] = beta;
+  ms->Symmetry->Crystal->Angle[2] = gamma;
 
   /* -- JV; for vol 
   ms->Mean = mean;
@@ -2502,7 +2645,7 @@ static int ObjectMapCCP4StrToMap(ObjectMap * I, char *CCP4Str, int bytes, int st
   if(!(ms->FDim[0] && ms->FDim[1] && ms->FDim[2]))
     ok = false;
   else {
-    CrystalUpdate(ms->Crystal);
+    SymmetryUpdate(ms->Symmetry);
     /*    CrystalDump(ms->Crystal); */
     ms->Field = IsosurfFieldAlloc(I->Obj.G, ms->FDim);
     ms->MapSource = cMapSourceCCP4;
@@ -2527,7 +2670,7 @@ static int ObjectMapCCP4StrToMap(ObjectMap * I, char *CCP4Str, int bytes, int st
           if(mind > *f)
             mind = dens;
           f++;
-          transform33f3f(ms->Crystal->FracToReal, v, vr);
+          transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
           for(e = 0; e < 3; e++)
             F4(ms->Field->points, cc[0], cc[1], cc[2], e) = vr[e];
         }
@@ -2542,7 +2685,7 @@ static int ObjectMapCCP4StrToMap(ObjectMap * I, char *CCP4Str, int bytes, int st
         v[1] = (b + ms->Min[1]) / ((float) ms->Div[1]);
         for(a = 0; a < ms->FDim[0]; a += (ms->FDim[0] - 1)) {
           v[0] = (a + ms->Min[0]) / ((float) ms->Div[0]);
-          transform33f3f(ms->Crystal->FracToReal, v, vr);
+          transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
           copy3f(vr, ms->Corner + 3 * d);
           d++;
         }
@@ -2576,13 +2719,13 @@ static int ObjectMapCCP4StrToMap(ObjectMap * I, char *CCP4Str, int bytes, int st
     v[1] = (ms->Min[1]) / ((float) ms->Div[1]);
     v[0] = (ms->Min[0]) / ((float) ms->Div[0]);
 
-    transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMin);
+    transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMin);
 
     v[2] = ((ms->FDim[2] - 1) + ms->Min[2]) / ((float) ms->Div[2]);
     v[1] = ((ms->FDim[1] - 1) + ms->Min[1]) / ((float) ms->Div[1]);
     v[0] = ((ms->FDim[0] - 1) + ms->Min[0]) / ((float) ms->Div[0]);
 
-    transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMax);
+    transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMax);
   }
 #ifdef _UNDEFINED
   printf("%d %d %d %d %d %d %d %d %d\n",
@@ -2966,22 +3109,22 @@ static int ObjectMapXPLORStrToMap(ObjectMap * I, char *XPLORStr, int state, int 
       ok = false;
     p = ParseNextLine(p);
     p = ParseNCopy(cc, p, 12);
-    if(sscanf(cc, "%f", &ms->Crystal->Dim[0]) != 1)
+    if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[0]) != 1)
       ok = false;
     p = ParseNCopy(cc, p, 12);
-    if(sscanf(cc, "%f", &ms->Crystal->Dim[1]) != 1)
+    if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[1]) != 1)
       ok = false;
     p = ParseNCopy(cc, p, 12);
-    if(sscanf(cc, "%f", &ms->Crystal->Dim[2]) != 1)
+    if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[2]) != 1)
       ok = false;
     p = ParseNCopy(cc, p, 12);
-    if(sscanf(cc, "%f", &ms->Crystal->Angle[0]) != 1)
+    if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[0]) != 1)
       ok = false;
     p = ParseNCopy(cc, p, 12);
-    if(sscanf(cc, "%f", &ms->Crystal->Angle[1]) != 1)
+    if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[1]) != 1)
       ok = false;
     p = ParseNCopy(cc, p, 12);
-    if(sscanf(cc, "%f", &ms->Crystal->Angle[2]) != 1)
+    if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[2]) != 1)
       ok = false;
     p = ParseNextLine(p);
     p = ParseNCopy(cc, p, 3);
@@ -3001,7 +3144,7 @@ static int ObjectMapXPLORStrToMap(ObjectMap * I, char *XPLORStr, int state, int 
     if(!(ms->FDim[0] && ms->FDim[1] && ms->FDim[2]))
       ok = false;
     else {
-      CrystalUpdate(ms->Crystal);
+      SymmetryUpdate(ms->Symmetry);
       ms->Field = IsosurfFieldAlloc(I->Obj.G, ms->FDim);
       ms->MapSource = cMapSourceCrystallographic;
       ms->Field->save_points = false;
@@ -3026,7 +3169,7 @@ static int ObjectMapXPLORStrToMap(ObjectMap * I, char *XPLORStr, int state, int 
               if(mind > dens)
                 mind = dens;
             }
-            transform33f3f(ms->Crystal->FracToReal, v, vr);
+            transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
             for(e = 0; e < 3; e++) {
               F4(ms->Field->points, a, b, c, e) = vr[e];
             }
@@ -3042,7 +3185,7 @@ static int ObjectMapXPLORStrToMap(ObjectMap * I, char *XPLORStr, int state, int 
             v[1] = (b + ms->Min[1]) / ((float) ms->Div[1]);
             for(a = 0; a < ms->FDim[0]; a += (ms->FDim[0] - 1)) {
               v[0] = (a + ms->Min[0]) / ((float) ms->Div[0]);
-              transform33f3f(ms->Crystal->FracToReal, v, vr);
+              transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
               copy3f(vr, ms->Corner + 3 * d);
               d++;
             }
@@ -3057,13 +3200,13 @@ static int ObjectMapXPLORStrToMap(ObjectMap * I, char *XPLORStr, int state, int 
     v[1] = (ms->Min[1]) / ((float) ms->Div[1]);
     v[0] = (ms->Min[0]) / ((float) ms->Div[0]);
 
-    transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMin);
+    transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMin);
 
     v[2] = ((ms->FDim[2] - 1) + ms->Min[2]) / ((float) ms->Div[2]);
     v[1] = ((ms->FDim[1] - 1) + ms->Min[1]) / ((float) ms->Div[1]);
     v[0] = ((ms->FDim[0] - 1) + ms->Min[0]) / ((float) ms->Div[0]);
 
-    transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMax);
+    transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMax);
 
   }
 #ifdef _UNDEFINED
@@ -3451,8 +3594,8 @@ static int ObjectMapBRIXStrToMap(ObjectMap * I, char *BRIXStr, int bytes, int st
   int normalize;
   int swap_bytes;
 
-  normalize = (int) SettingGet(I->Obj.G, cSetting_normalize_o_maps);
-  swap_bytes = (int) SettingGet(I->Obj.G, cSetting_swap_dsn6_bytes);
+  normalize = SettingGetGlobal_b(I->Obj.G, cSetting_normalize_o_maps);
+  swap_bytes = SettingGetGlobal_b(I->Obj.G, cSetting_swap_dsn6_bytes);
   if(state < 0)
     state = I->NState;
   if(I->NState <= state) {
@@ -3534,17 +3677,17 @@ static int ObjectMapBRIXStrToMap(ObjectMap * I, char *BRIXStr, int bytes, int st
         if(WordMatch(I->Obj.G, "cell", cc, true) < 0) {
           p = ParseWordCopy(cc, pp, 50);
 
-          if(sscanf(cc, "%f", &ms->Crystal->Dim[0]) == 1) {
+          if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[0]) == 1) {
             p = ParseWordCopy(cc, p, 50);
-            if(sscanf(cc, "%f", &ms->Crystal->Dim[1]) == 1) {
+            if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[1]) == 1) {
               p = ParseWordCopy(cc, p, 50);
-              if(sscanf(cc, "%f", &ms->Crystal->Dim[2]) == 1) {
+              if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[2]) == 1) {
                 p = ParseWordCopy(cc, p, 50);
-                if(sscanf(cc, "%f", &ms->Crystal->Angle[0]) == 1) {
+                if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[0]) == 1) {
                   p = ParseWordCopy(cc, p, 50);
-                  if(sscanf(cc, "%f", &ms->Crystal->Angle[1]) == 1) {
+                  if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[1]) == 1) {
                     p = ParseWordCopy(cc, p, 50);
-                    if(sscanf(cc, "%f", &ms->Crystal->Angle[2]) == 1) {
+                    if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[2]) == 1) {
                       got_cell = true;
                     }
                   }
@@ -3650,12 +3793,12 @@ static int ObjectMapBRIXStrToMap(ObjectMap * I, char *BRIXStr, int bytes, int st
       ms->Div[2] = *(shint_ptr++);
       got_grid = true;
 
-      ms->Crystal->Dim[0] = (float) (*(shint_ptr++));
-      ms->Crystal->Dim[1] = (float) (*(shint_ptr++));
-      ms->Crystal->Dim[2] = (float) (*(shint_ptr++));
-      ms->Crystal->Angle[0] = (float) (*(shint_ptr++));
-      ms->Crystal->Angle[1] = (float) (*(shint_ptr++));
-      ms->Crystal->Angle[2] = (float) (*(shint_ptr++));
+      ms->Symmetry->Crystal->Dim[0] = (float) (*(shint_ptr++));
+      ms->Symmetry->Crystal->Dim[1] = (float) (*(shint_ptr++));
+      ms->Symmetry->Crystal->Dim[2] = (float) (*(shint_ptr++));
+      ms->Symmetry->Crystal->Angle[0] = (float) (*(shint_ptr++));
+      ms->Symmetry->Crystal->Angle[1] = (float) (*(shint_ptr++));
+      ms->Symmetry->Crystal->Angle[2] = (float) (*(shint_ptr++));
       got_cell = true;
 
       prod = (float) (*(shint_ptr++)) / 100.0F;
@@ -3667,8 +3810,8 @@ static int ObjectMapBRIXStrToMap(ObjectMap * I, char *BRIXStr, int bytes, int st
       scale_factor = (float) (*(shint_ptr++));
 
       for(a = 0; a < 3; a++) {
-        ms->Crystal->Dim[a] /= scale_factor;
-        ms->Crystal->Angle[a] /= scale_factor;
+        ms->Symmetry->Crystal->Dim[a] /= scale_factor;
+        ms->Symmetry->Crystal->Angle[a] /= scale_factor;
       }
     }
   }
@@ -3685,7 +3828,7 @@ static int ObjectMapBRIXStrToMap(ObjectMap * I, char *BRIXStr, int bytes, int st
     if(!(ms->FDim[0] && ms->FDim[1] && ms->FDim[2]))
       ok = false;
     else {
-      CrystalUpdate(ms->Crystal);
+      SymmetryUpdate(ms->Symmetry);
       ms->Field = IsosurfFieldAlloc(I->Obj.G, ms->FDim);
       ms->MapSource = cMapSourceBRIX;
       ms->Field->save_points = false;
@@ -3730,7 +3873,7 @@ static int ObjectMapBRIXStrToMap(ObjectMap * I, char *BRIXStr, int bytes, int st
                         maxd = dens;
                       if(mind > dens)
                         mind = dens;
-                      transform33f3f(ms->Crystal->FracToReal, v, vr);
+                      transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
                       for(e = 0; e < 3; e++) {
                         F4(ms->Field->points, xa, xb, xc, e) = vr[e];
                       }
@@ -3758,7 +3901,7 @@ static int ObjectMapBRIXStrToMap(ObjectMap * I, char *BRIXStr, int bytes, int st
             v[1] = (b + ms->Min[1]) / ((float) ms->Div[1]);
             for(a = 0; a < ms->FDim[0]; a += (ms->FDim[0] - 1)) {
               v[0] = (a + ms->Min[0]) / ((float) ms->Div[0]);
-              transform33f3f(ms->Crystal->FracToReal, v, vr);
+              transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
               copy3f(vr, ms->Corner + 3 * d);
               d++;
             }
@@ -3784,13 +3927,13 @@ static int ObjectMapBRIXStrToMap(ObjectMap * I, char *BRIXStr, int bytes, int st
       v[1] = (ms->Min[1]) / ((float) ms->Div[1]);
       v[0] = (ms->Min[0]) / ((float) ms->Div[0]);
 
-      transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMin);
+      transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMin);
 
       v[2] = ((ms->FDim[2] - 1) + ms->Min[2]) / ((float) ms->Div[2]);
       v[1] = ((ms->FDim[1] - 1) + ms->Min[1]) / ((float) ms->Div[1]);
       v[0] = ((ms->FDim[0] - 1) + ms->Min[0]) / ((float) ms->Div[0]);
 
-      transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMax);
+      transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMax);
 
       PRINTFB(I->Obj.G, FB_ObjectMap, FB_Details)
         " BRIXStrToMap: Map Size %d x %d x %d\n", ms->FDim[0], ms->FDim[1], ms->FDim[2]
@@ -3868,7 +4011,7 @@ static int ObjectMapGRDStrToMap(ObjectMap * I, char *GRDStr, int bytes, int stat
   }
   ms = &I->State[state];
   ObjectMapStateInit(I->Obj.G, ms);
-  normalize = (int) SettingGet(I->Obj.G, cSetting_normalize_grd_maps);
+  normalize = SettingGetGlobal_b(I->Obj.G, cSetting_normalize_grd_maps);
   maxd = -FLT_MAX;
   mind = FLT_MAX;
 
@@ -4026,17 +4169,17 @@ end d
   if(ok) {
     if(ascii) {
       p = ParseWordCopy(cc, p, 50);
-      if(sscanf(cc, "%f", &ms->Crystal->Dim[0]) == 1) {
+      if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[0]) == 1) {
         p = ParseWordCopy(cc, p, 50);
-        if(sscanf(cc, "%f", &ms->Crystal->Dim[1]) == 1) {
+        if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[1]) == 1) {
           p = ParseWordCopy(cc, p, 50);
-          if(sscanf(cc, "%f", &ms->Crystal->Dim[2]) == 1) {
+          if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Dim[2]) == 1) {
             p = ParseWordCopy(cc, p, 50);
-            if(sscanf(cc, "%f", &ms->Crystal->Angle[0]) == 1) {
+            if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[0]) == 1) {
               p = ParseWordCopy(cc, p, 50);
-              if(sscanf(cc, "%f", &ms->Crystal->Angle[1]) == 1) {
+              if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[1]) == 1) {
                 p = ParseWordCopy(cc, p, 50);
-                if(sscanf(cc, "%f", &ms->Crystal->Angle[2]) == 1) {
+                if(sscanf(cc, "%f", &ms->Symmetry->Crystal->Angle[2]) == 1) {
                   got_cell = true;
                 }
               }
@@ -4046,12 +4189,12 @@ end d
       }
       ok = got_cell;
     } else {
-      ms->Crystal->Dim[0] = *(f++);     /* x-extent */
-      ms->Crystal->Dim[1] = *(f++);     /* y-extent */
-      ms->Crystal->Dim[2] = *(f++);     /* z-extent */
-      ms->Crystal->Angle[0] = (*f++);   /* xang */
-      ms->Crystal->Angle[1] = (*f++);   /* yang */
-      ms->Crystal->Angle[2] = (*f++);   /* zang */
+      ms->Symmetry->Crystal->Dim[0] = *(f++);     /* x-extent */
+      ms->Symmetry->Crystal->Dim[1] = *(f++);     /* y-extent */
+      ms->Symmetry->Crystal->Dim[2] = *(f++);     /* z-extent */
+      ms->Symmetry->Crystal->Angle[0] = (*f++);   /* xang */
+      ms->Symmetry->Crystal->Angle[1] = (*f++);   /* yang */
+      ms->Symmetry->Crystal->Angle[2] = (*f++);   /* zang */
       got_cell = 1;
     }
   }
@@ -4171,7 +4314,7 @@ end d
       dump3i(ms->FDim, "ms->FDim");
     }
 
-    CrystalUpdate(ms->Crystal);
+    SymmetryUpdate(ms->Symmetry);
     ms->Field = IsosurfFieldAlloc(I->Obj.G, ms->FDim);
     ms->MapSource = cMapSourceGRD;
     ms->Field->save_points = false;
@@ -4210,7 +4353,7 @@ end d
               if(mind > dens)
                 mind = dens;
             }
-            transform33f3f(ms->Crystal->FracToReal, v, vr);
+            transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
             for(e = 0; e < 3; e++) {
               F4(ms->Field->points, a, b, c, e) = vr[e];
             }
@@ -4255,7 +4398,7 @@ end d
         v[1] = (b + ms->Min[1]) / ((float) ms->Div[1]);
         for(a = 0; a < ms->FDim[0]; a += (ms->FDim[0] - 1)) {
           v[0] = (a + ms->Min[0]) / ((float) ms->Div[0]);
-          transform33f3f(ms->Crystal->FracToReal, v, vr);
+          transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
           copy3f(vr, ms->Corner + 3 * d);
           d++;
         }
@@ -4266,13 +4409,13 @@ end d
     v[1] = (ms->Min[1]) / ((float) ms->Div[1]);
     v[0] = (ms->Min[0]) / ((float) ms->Div[0]);
 
-    transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMin);
+    transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMin);
 
     v[2] = ((ms->FDim[2] - 1) + ms->Min[2]) / ((float) ms->Div[2]);
     v[1] = ((ms->FDim[1] - 1) + ms->Min[1]) / ((float) ms->Div[1]);
     v[0] = ((ms->FDim[0] - 1) + ms->Min[0]) / ((float) ms->Div[0]);
 
-    transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMax);
+    transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMax);
 
     PRINTFB(I->Obj.G, FB_ObjectMap, FB_Details)
       " GRDXStrToMap: Map Size %d x %d x %d\n", ms->FDim[0], ms->FDim[1], ms->FDim[2]
@@ -4356,6 +4499,7 @@ ObjectMap *ObjectMapLoadCCP4(PyMOLGlobals * G, ObjectMap * obj, char *fname, int
   FILE *f = NULL;
   char *buffer, *p;
   long size;
+  size_t res;
 
   if(!is_string) {
 
@@ -4381,7 +4525,10 @@ ObjectMap *ObjectMapLoadCCP4(PyMOLGlobals * G, ObjectMap * obj, char *fname, int
       ErrChkPtr(G, buffer);
       p = buffer;
       fseek(f, 0, SEEK_SET);
-      fread(p, size, 1, f);
+      res = fread(p, size, 1, f);
+      /* error reading file */
+      if(1!=res)
+	return NULL;
       fclose(f);
     } else {
       buffer = fname;
@@ -4400,7 +4547,7 @@ ObjectMap *ObjectMapLoadCCP4(PyMOLGlobals * G, ObjectMap * obj, char *fname, int
         ObjectMapState *ms;
         ms = &I->State[state];
         if(ms->Active) {
-          CrystalDump(ms->Crystal);
+          CrystalDump(ms->Symmetry->Crystal);
         }
       }
     }
@@ -4523,6 +4670,7 @@ ObjectMap *ObjectMapLoadPHI(PyMOLGlobals * G, ObjectMap * obj, char *fname, int 
   FILE *f = NULL;
   long size;
   char *buffer, *p;
+  size_t res;
 
   if(!is_string) {
 
@@ -4548,7 +4696,10 @@ ObjectMap *ObjectMapLoadPHI(PyMOLGlobals * G, ObjectMap * obj, char *fname, int 
       ErrChkPtr(G, buffer);
       p = buffer;
       fseek(f, 0, SEEK_SET);
-      fread(p, size, 1, f);
+      res = fread(p, size, 1, f);
+      /* error reading file */
+      if(1!=res)
+	return NULL;
       fclose(f);
     } else {
       buffer = fname;
@@ -4875,6 +5026,7 @@ ObjectMap *ObjectMapLoadDXFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, i
   long size;
   char *buffer, *p;
   float mat[9];
+  size_t res;
 
   f = fopen(fname, "rb");
   if(!f) {
@@ -4894,7 +5046,10 @@ ObjectMap *ObjectMapLoadDXFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, i
     ErrChkPtr(G, buffer);
     p = buffer;
     fseek(f, 0, SEEK_SET);
-    fread(p, size, 1, f);
+    res = fread(p, size, 1, f);
+    /* error reading file */
+    if(1!=res)
+      return NULL;
     fclose(f);
 
     I = ObjectMapReadDXStr(G, obj, buffer, size, state, quiet);
@@ -4906,7 +5061,7 @@ ObjectMap *ObjectMapLoadDXFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, i
       ObjectMapState *ms;
       ms = &I->State[state];
       if(ms->Active) {
-        multiply33f33f(ms->Crystal->FracToReal, ms->Crystal->RealToFrac, mat);
+        multiply33f33f(ms->Symmetry->Crystal->FracToReal, ms->Symmetry->Crystal->RealToFrac, mat);
       }
     }
   }
@@ -5119,7 +5274,8 @@ ObjectMap *ObjectMapLoadACNTFile(PyMOLGlobals * G, ObjectMap * obj, char *fname,
   long size;
   char *buffer, *p;
   float mat[9];
-
+  size_t res;
+  
   f = fopen(fname, "rb");
   if(!f) {
     ok = ErrMessage(G, "ObjectMapLoadACNTFile", "Unable to open file!");
@@ -5138,7 +5294,9 @@ ObjectMap *ObjectMapLoadACNTFile(PyMOLGlobals * G, ObjectMap * obj, char *fname,
     ErrChkPtr(G, buffer);
     p = buffer;
     fseek(f, 0, SEEK_SET);
-    fread(p, size, 1, f);
+    res = fread(p, size, 1, f);
+    if(1!=res)
+      return NULL;
     fclose(f);
 
     I = ObjectMapReadACNTStr(G, obj, buffer, size, state, quiet);
@@ -5150,7 +5308,7 @@ ObjectMap *ObjectMapLoadACNTFile(PyMOLGlobals * G, ObjectMap * obj, char *fname,
       ObjectMapState *ms;
       ms = &I->State[state];
       if(ms->Active) {
-        multiply33f33f(ms->Crystal->FracToReal, ms->Crystal->RealToFrac, mat);
+        multiply33f33f(ms->Symmetry->Crystal->FracToReal, ms->Symmetry->Crystal->RealToFrac, mat);
       }
     }
   }
@@ -5169,6 +5327,7 @@ ObjectMap *ObjectMapLoadFLDFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, 
   long size;
   char *buffer, *p;
   float mat[9];
+  size_t res;
 
   f = fopen(fname, "rb");
   if(!f)
@@ -5186,7 +5345,10 @@ ObjectMap *ObjectMapLoadFLDFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, 
     ErrChkPtr(G, buffer);
     p = buffer;
     fseek(f, 0, SEEK_SET);
-    fread(p, size, 1, f);
+    res = fread(p, size, 1, f);
+    /* error reading file */
+    if(1!=res)
+      return NULL;
     fclose(f);
 
     I = ObjectMapReadFLDStr(G, obj, buffer, size, state, quiet);
@@ -5198,7 +5360,7 @@ ObjectMap *ObjectMapLoadFLDFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, 
       ObjectMapState *ms;
       ms = &I->State[state];
       if(ms->Active) {
-        multiply33f33f(ms->Crystal->FracToReal, ms->Crystal->RealToFrac, mat);
+        multiply33f33f(ms->Symmetry->Crystal->FracToReal, ms->Symmetry->Crystal->RealToFrac, mat);
       }
     }
   }
@@ -5217,6 +5379,7 @@ ObjectMap *ObjectMapLoadBRIXFile(PyMOLGlobals * G, ObjectMap * obj, char *fname,
   long size;
   char *buffer, *p;
   float mat[9];
+  size_t res;
 
   f = fopen(fname, "rb");
   if(!f)
@@ -5234,7 +5397,11 @@ ObjectMap *ObjectMapLoadBRIXFile(PyMOLGlobals * G, ObjectMap * obj, char *fname,
     ErrChkPtr(G, buffer);
     p = buffer;
     fseek(f, 0, SEEK_SET);
-    fread(p, size, 1, f);
+    res = fread(p, size, 1, f);
+    /* error reading file */
+    if(1!=res)
+      return NULL;
+    
     p[size] = 0;
     fclose(f);
 
@@ -5247,8 +5414,8 @@ ObjectMap *ObjectMapLoadBRIXFile(PyMOLGlobals * G, ObjectMap * obj, char *fname,
       ObjectMapState *ms;
       ms = &I->State[state];
       if(ms->Active) {
-        CrystalDump(ms->Crystal);
-        multiply33f33f(ms->Crystal->FracToReal, ms->Crystal->RealToFrac, mat);
+        CrystalDump(ms->Symmetry->Crystal);
+        multiply33f33f(ms->Symmetry->Crystal->FracToReal, ms->Symmetry->Crystal->RealToFrac, mat);
       }
     }
   }
@@ -5267,6 +5434,7 @@ ObjectMap *ObjectMapLoadGRDFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, 
   long size;
   char *buffer, *p;
   float mat[9];
+  size_t res;
 
   f = fopen(fname, "rb");
   if(!f)
@@ -5284,7 +5452,10 @@ ObjectMap *ObjectMapLoadGRDFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, 
     ErrChkPtr(G, buffer);
     p = buffer;
     fseek(f, 0, SEEK_SET);
-    fread(p, size, 1, f);
+    res = fread(p, size, 1, f);
+    /* error reading file */
+    if(1!=res)
+      return NULL;
     p[size] = 0;
     fclose(f);
 
@@ -5297,8 +5468,8 @@ ObjectMap *ObjectMapLoadGRDFile(PyMOLGlobals * G, ObjectMap * obj, char *fname, 
       ObjectMapState *ms;
       ms = &I->State[state];
       if(ms->Active) {
-        CrystalDump(ms->Crystal);
-        multiply33f33f(ms->Crystal->FracToReal, ms->Crystal->RealToFrac, mat);
+        CrystalDump(ms->Symmetry->Crystal);
+        multiply33f33f(ms->Symmetry->Crystal->FracToReal, ms->Symmetry->Crystal->RealToFrac, mat);
       }
     }
   }
@@ -5316,6 +5487,7 @@ ObjectMap *ObjectMapLoadXPLOR(PyMOLGlobals * G, ObjectMap * obj, char *fname,
   FILE *f = NULL;
   long size;
   char *buffer, *p;
+  size_t res;
 
   if(is_file) {
     f = fopen(fname, "rb");
@@ -5340,7 +5512,10 @@ ObjectMap *ObjectMapLoadXPLOR(PyMOLGlobals * G, ObjectMap * obj, char *fname,
       ErrChkPtr(G, buffer);
       p = buffer;
       fseek(f, 0, SEEK_SET);
-      fread(p, size, 1, f);
+      res = fread(p, size, 1, f);
+      /* error reading file */
+      if(1!=res)
+	return NULL;
       p[size] = 0;
       fclose(f);
     } else {
@@ -5360,7 +5535,7 @@ ObjectMap *ObjectMapLoadXPLOR(PyMOLGlobals * G, ObjectMap * obj, char *fname,
           ObjectMapState *ms;
           ms = &I->State[state];
           if(ms->Active) {
-            CrystalDump(ms->Crystal);
+            CrystalDump(ms->Symmetry->Crystal);
           }
         }
       }
@@ -5608,9 +5783,9 @@ ObjectMap *ObjectMapLoadChemPyMap(PyMOLGlobals * G, ObjectMap * I, PyObject * Ma
 
     if(!PConvAttrToStrMaxLen(Map, "format", format, sizeof(WordType) - 1))
       ok = ErrMessage(G, "LoadChemPyMap", "bad 'format' parameter.");
-    else if(!PConvAttrToFloatArrayInPlace(Map, "cell_dim", ms->Crystal->Dim, 3))
+    else if(!PConvAttrToFloatArrayInPlace(Map, "cell_dim", ms->Symmetry->Crystal->Dim, 3))
       ok = ErrMessage(G, "LoadChemPyMap", "bad 'cell_dim' parameter.");
-    else if(!PConvAttrToFloatArrayInPlace(Map, "cell_ang", ms->Crystal->Angle, 3))
+    else if(!PConvAttrToFloatArrayInPlace(Map, "cell_ang", ms->Symmetry->Crystal->Angle, 3))
       ok = ErrMessage(G, "LoadChemPyMap", "bad 'cell_ang' parameter.");
     else if(!PConvAttrToIntArrayInPlace(Map, "cell_div", ms->Div, 3))
       ok = ErrMessage(G, "LoadChemPyMap", "bad 'cell_div' parameter.");
@@ -5644,7 +5819,7 @@ ObjectMap *ObjectMapLoadChemPyMap(PyMOLGlobals * G, ObjectMap * I, PyObject * Ma
         if(!(ms->FDim[0] && ms->FDim[1] && ms->FDim[2]))
           ok = false;
         else {
-          CrystalUpdate(ms->Crystal);
+          SymmetryUpdate(ms->Symmetry);
           ms->Field = IsosurfFieldAlloc(G, ms->FDim);
           for(c = 0; c < ms->FDim[2]; c++) {
             v[2] = (c + ms->Min[2]) / ((float) ms->Div[2]);
@@ -5660,7 +5835,7 @@ ObjectMap *ObjectMapLoadChemPyMap(PyMOLGlobals * G, ObjectMap * I, PyObject * Ma
                   maxd = dens;
                 if(mind > dens)
                   mind = dens;
-                transform33f3f(ms->Crystal->FracToReal, v, vr);
+                transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
                 for(e = 0; e < 3; e++)
                   F4(ms->Field->points, a, b, c, e) = vr[e];
               }
@@ -5675,7 +5850,7 @@ ObjectMap *ObjectMapLoadChemPyMap(PyMOLGlobals * G, ObjectMap * I, PyObject * Ma
                 v[1] = (b + ms->Min[1]) / ((float) ms->Div[1]);
                 for(a = 0; a < ms->FDim[0]; a += (ms->FDim[0] - 1)) {
                   v[0] = (a + ms->Min[0]) / ((float) ms->Div[0]);
-                  transform33f3f(ms->Crystal->FracToReal, v, vr);
+                  transform33f3f(ms->Symmetry->Crystal->FracToReal, v, vr);
                   copy3f(vr, ms->Corner + 3 * d);
                   d++;
                 }
@@ -5687,19 +5862,19 @@ ObjectMap *ObjectMapLoadChemPyMap(PyMOLGlobals * G, ObjectMap * I, PyObject * Ma
     }
 
     if(ok) {
-      CrystalDump(ms->Crystal);
+      CrystalDump(ms->Symmetry->Crystal);
 
       v[2] = (ms->Min[2]) / ((float) ms->Div[2]);
       v[1] = (ms->Min[1]) / ((float) ms->Div[1]);
       v[0] = (ms->Min[0]) / ((float) ms->Div[0]);
 
-      transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMin);
+      transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMin);
 
       v[2] = ((ms->FDim[2] - 1) + ms->Min[2]) / ((float) ms->Div[2]);
       v[1] = ((ms->FDim[1] - 1) + ms->Min[1]) / ((float) ms->Div[1]);
       v[0] = ((ms->FDim[0] - 1) + ms->Min[0]) / ((float) ms->Div[0]);
 
-      transform33f3f(ms->Crystal->FracToReal, v, ms->ExtentMax);
+      transform33f3f(ms->Symmetry->Crystal->FracToReal, v, ms->ExtentMax);
 
     }
 

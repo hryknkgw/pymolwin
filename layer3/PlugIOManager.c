@@ -14,7 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
-
+#include"os_python.h"
 #include "os_std.h"
 #include "MemoryDebug.h"
 #include "PlugIOManager.h"
@@ -48,7 +48,7 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
                           float *shift, int quiet, char *plugin_type)
 {
 
-  PRINTFB(G, FB_Errors, FB_ObjectMolecule)
+  PRINTFB(G, FB_ObjectMolecule, FB_Errors)
     " ObjectMolecule-Error: sorry, VMD Molfile Plugins not compiled into this build.\n"
     ENDFB(G);
   return 0;
@@ -57,7 +57,7 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
 ObjectMap *PlugIOManagerLoadVol(PyMOLGlobals * G, ObjectMap * obj,
                                 char *fname, int state, int quiet, char *plugin_type)
 {
-  PRINTFB(G, FB_Errors, FB_ObjectMolecule)
+  PRINTFB(G, FB_ObjectMolecule, FB_Errors)
     " ObjectMap-Error: sorry, VMD Molfile Plugins not compiled into this build.\n"
     ENDFB(G);
   return NULL;
@@ -136,7 +136,7 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
       }
     }
     if(!plugin) {
-      PRINTFB(G, FB_Errors, FB_ObjectMolecule)
+      PRINTFB(G, FB_ObjectMolecule, FB_Errors)
         " ObjectMolecule: unable to locate plugin '%s'\n", plugin_type ENDFB(G);
     } else {
       int natoms;
@@ -151,11 +151,11 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
       file_handle = plugin->open_file_read(fname, plugin_type, &natoms);
 
       if(!file_handle) {
-        PRINTFB(G, FB_Errors, FB_ObjectMolecule)
+        PRINTFB(G, FB_ObjectMolecule, FB_Errors)
           " ObjectMolecule: plugin '%s' cannot open '%s'.\n", plugin_type, fname ENDFB(G);
       } else if (natoms!=obj->NAtom) {
-	PRINTFB(G, FB_Errors, FB_ObjectMolecule)
-          " ObjectMolecule: plugin '%s' cannot open file because the number of atoms in the object (%d) did not equal the number of atoms in the '%s' (%d) file.\n", plugin_type, obj->NAtom, plugin_type, natoms, fname ENDFB(G);
+	PRINTFB(G, FB_ObjectMolecule, FB_Errors)
+          " ObjectMolecule: plugin '%s' cannot open file because the number of atoms in the object (%d) did not equal the number of atoms in the '%s' (%d) file.\n", plugin_type, obj->NAtom, plugin_type, natoms ENDFB(G);
       } else if(cs_tmpl) {
 	/* by this point, we have opened the DCD file, and we have a valid topology file (obj->CSet[0] exists) */
         CoordSet *cs = CoordSetCopy(cs_tmpl);
@@ -176,7 +176,7 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
             if(cnt >= start) {
               icnt--;
               if(icnt > 0) {
-                PRINTFB(G, FB_Details, FB_ObjectMolecule)
+                PRINTFB(G, FB_ObjectMolecule, FB_Details)
                   " ObjectMolecule: skipping set %d...\n", cnt ENDFB(G);
               } else {
                 icnt = interval;
@@ -184,7 +184,7 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
               }
               if(icnt == interval) {
                 if(n_avg < average) {
-                  PRINTFB(G, FB_Details, FB_ObjectMolecule)
+                  PRINTFB(G, FB_ObjectMolecule, FB_Details)
                     " ObjectMolecule: averaging set %d...\n", cnt ENDFB(G);
                 } else {
                   /* compute average */
@@ -204,7 +204,8 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
                   if(!obj->NCSet) zoom_flag = true;
 
 		  /* make sure we have room for 'frame' CoordSet*'s in obj->CSet */
-                  VLACheck(obj->CSet, CoordSet, frame); /* was CoordSet* */
+		  /* TODO: TEST this function */
+                  VLACheck(obj->CSet, CoordSet*, frame); /* was CoordSet* */
 		  /* bump the object's state count */
                   if(obj->NCSet <= frame) obj->NCSet = frame + 1;
 		  /* if there's data in this state's coordset, emtpy it */
@@ -213,13 +214,13 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
                   obj->CSet[frame] = cs;
                   ncnt++;
                   if(average < 2) {
-                    PRINTFB(G, FB_Details, FB_ObjectMolecule)
+                    PRINTFB(G, FB_ObjectMolecule, FB_Details)
                       " ObjectMolecule: read set %d into state %d...\n", cnt, frame + 1
                       ENDFB(G);
                   } else {
-                    PRINTFB(G, FB_Details, FB_ObjectMolecule)
+                    PRINTFB(G, FB_ObjectMolecule, FB_Details)
                       " ObjectMolecule: averaging set %d...\n", cnt ENDFB(G);
-                    PRINTFB(G, FB_Details, FB_ObjectMolecule)
+                    PRINTFB(G, FB_ObjectMolecule, FB_Details)
                       " ObjectMolecule: average loaded into state %d...\n", frame + 1
                       ENDFB(G);
                   }
@@ -233,7 +234,7 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
                 }
               }
             } else {
-              PRINTFB(G, FB_Details, FB_ObjectMolecule)
+              PRINTFB(G, FB_ObjectMolecule, FB_Details)
                 " ObjectMolecule: skipping set %d...\n", cnt ENDFB(G);
             }
           } /* end while */
@@ -243,7 +244,7 @@ int PlugIOManagerLoadTraj(PyMOLGlobals * G, ObjectMolecule * obj,
         SceneChanged(G);
         SceneCountFrames(G);
         if(zoom_flag)
-          if(SettingGet(G, cSetting_auto_zoom)) {
+          if(SettingGetGlobal_i(G, cSetting_auto_zoom)) {
             ExecutiveWindowZoom(G, obj->Obj.Name, 0.0, -1, 0, 0, quiet);        /* auto zoom (all states) */
           }
       }
@@ -274,7 +275,7 @@ ObjectMap *PlugIOManagerLoadVol(PyMOLGlobals * G, ObjectMap * obj,
         }
       }
       if(!plugin) {
-        PRINTFB(G, FB_Errors, FB_ObjectMolecule)
+        PRINTFB(G, FB_ObjectMolecule, FB_Errors)
           " ObjectMolecule: unable to locate plugin '%s'\n", plugin_type ENDFB(G);
         ok = false;
       }
@@ -283,7 +284,7 @@ ObjectMap *PlugIOManagerLoadVol(PyMOLGlobals * G, ObjectMap * obj,
     if(ok) {
       file_handle = plugin->open_file_read(fname, plugin_type, &natoms);
       if(!file_handle) {
-        PRINTFB(G, FB_Errors, FB_ObjectMolecule)
+        PRINTFB(G, FB_ObjectMolecule, FB_Errors)
           " ObjectMolecule: plugin '%s' cannot open '%s'.\n", plugin_type, fname ENDFB(G);
         ok = false;
       }
@@ -311,7 +312,7 @@ ObjectMap *PlugIOManagerLoadVol(PyMOLGlobals * G, ObjectMap * obj,
           }
 
           if(plugin->read_volumetric_data(file_handle, i, datablock, colorblock)) {
-            PRINTFB(G, FB_Errors, FB_ObjectMolecule)
+            PRINTFB(G, FB_ObjectMolecule, FB_Errors)
               " ObjectMap: plugin '%s' cannot open '%s'.\n", plugin_type, fname ENDFB(G);
             ok = false;
           } else {
@@ -328,7 +329,7 @@ ObjectMap *PlugIOManagerLoadVol(PyMOLGlobals * G, ObjectMap * obj,
                  dump3f(v->zaxis,"z");
                */
 
-              PRINTFB(G, FB_Errors, FB_ObjectMolecule)
+              PRINTFB(G, FB_ObjectMolecule, FB_Errors)
                 " ObjectMap-Error: PyMOL only handles XYZ-axes-aligned CUBE files.\n"
                 ENDFB(G);
               ok = false;
@@ -469,340 +470,5 @@ ObjectMap *PlugIOManagerLoadVol(PyMOLGlobals * G, ObjectMap * obj,
   }
   return obj;
 }
-
-#if 0
-char *p;
-float dens, dens_rev;
-int a, b, c, d, e;
-float v[3], maxd, mind;
-int ok = true;
-int little_endian = 1;
-
-/* PHI named from their docs */
-int map_endian = 0;
-int map_dim;
-int map_bytes;
-
-ObjectMapState *ms;
-
-char cc[MAXLINELEN];
-char *rev;
-
-ms->Div[0] = (map_dim - 1) / 2;
-ms->Div[1] = (map_dim - 1) / 2;
-ms->Div[2] = (map_dim - 1) / 2;
-ms->Min[0] = -ms->Div[0];
-ms->Min[1] = -ms->Div[1];
-ms->Min[2] = -ms->Div[2];
-ms->Max[0] = ms->Div[0];
-ms->Max[1] = ms->Div[1];
-ms->Max[2] = ms->Div[2];
-
-ms->Field = IsosurfFieldAlloc(obj->Obj.G, ms->FDim);
-ms->MapSource = cMapSourceGeneral;
-ms->Field->save_points = false;
-
-for(c = 0; c < ms->FDim[2]; c++) {      /* z y x ordering into c b a  so that x = a, etc. */
-  for(b = 0; b < ms->FDim[1]; b++) {
-    for(a = 0; a < ms->FDim[0]; a++) {
-
-      if(little_endian != map_endian) {
-        rev[0] = p[3];
-        rev[1] = p[2];
-        rev[2] = p[1];
-        rev[3] = p[0];
-      } else {
-        rev[0] = p[0];          /* gotta go char by char because of memory alignment issues ... */
-        rev[1] = p[1];
-        rev[2] = p[2];
-        rev[3] = p[3];
-      }
-      dens = *((float *) rev);
-      F3(ms->Field->data, a, b, c) = dens;
-      if(maxd < dens)
-        maxd = dens;
-      if(mind > dens)
-        mind = dens;
-      p += 4;
-    }
-  }
-}
-
-p += 4;
-
-p += 4;
-ParseNCopy(cc, p, 16);
-PRINTFB(obj->Obj.G, FB_ObjectMap, FB_Details)
-  " PHIStrToMap: %s\n", cc ENDFB(obj->Obj.G);
-p += 16;
-p += 4;
-
-ms->Grid = Alloc(float, 3);
-p += 4;
-if(little_endian != map_endian)
-{
-rev[0] = p[3];
-rev[1] = p[2];
-rev[2] = p[1];
-rev[3] = p[0];
-} else {
-  rev[0] = p[0];                /* gotta go char by char because of memory alignment issues ... */
-  rev[1] = p[1];
-  rev[2] = p[2];
-  rev[3] = p[3];
-}
-
-ms->Grid[0] = 1.0F / (*((float *) rev));
-ms->Grid[1] = ms->Grid[0];
-ms->Grid[2] = ms->Grid[0];
-p += 4;
-
-ms->Origin = Alloc(float, 3);
-if(little_endian != map_endian) {
-  rev[0] = p[3];
-  rev[1] = p[2];
-  rev[2] = p[1];
-  rev[3] = p[0];
-} else {
-  rev[0] = p[0];                /* gotta go char by char because of memory alignment issues ... */
-  rev[1] = p[1];
-  rev[2] = p[2];
-  rev[3] = p[3];;
-}
-
-ms->Origin[0] = *((float *) rev);
-p += 4;
-
-if(little_endian != map_endian) {
-  rev[0] = p[3];
-  rev[1] = p[2];
-  rev[2] = p[1];
-  rev[3] = p[0];
-} else {
-  rev[0] = p[0];                /* gotta go char by char because of memory alignment issues ... */
-  rev[1] = p[1];
-  rev[2] = p[2];
-  rev[3] = p[3];;
-}
-
-ms->Origin[1] = *((float *) rev);
-p += 4;
-if(little_endian != map_endian) {
-  rev[0] = p[3];
-  rev[1] = p[2];
-  rev[2] = p[1];
-  rev[3] = p[0];
-} else {
-  rev[0] = p[0];                /* gotta go char by char because of memory alignment issues ... */
-  rev[1] = p[1];
-  rev[2] = p[2];
-  rev[3] = p[3];;
-}
-
-ms->Origin[2] = *((float *) rev);
-p += 4;
-
-p += 4;
-
-if(ok) {
-  for(e = 0; e < 3; e++) {
-    ms->ExtentMin[e] = ms->Origin[e] + ms->Grid[e] * ms->Min[e];
-    ms->ExtentMax[e] = ms->Origin[e] + ms->Grid[e] * ms->Max[e];
-  }
-}
-
-for(c = 0; c < ms->FDim[2]; c++) {
-  v[2] = ms->Origin[2] + ms->Grid[2] * (c + ms->Min[2]);
-  for(b = 0; b < ms->FDim[1]; b++) {
-    v[1] = ms->Origin[1] + ms->Grid[1] * (b + ms->Min[1]);
-    for(a = 0; a < ms->FDim[0]; a++) {
-      v[0] = ms->Origin[0] + ms->Grid[0] * (a + ms->Min[0]);
-      for(e = 0; e < 3; e++) {
-        F4(ms->Field->points, a, b, c, e) = v[e];
-      }
-    }
-  }
-}
-
-d = 0;
-for(c = 0; c < ms->FDim[2]; c += ms->FDim[2] - 1) {
-  v[2] = ms->Origin[2] + ms->Grid[2] * (c + ms->Min[2]);
-
-  for(b = 0; b < ms->FDim[1]; b += ms->FDim[1] - 1) {
-    v[1] = ms->Origin[1] + ms->Grid[1] * (b + ms->Min[1]);
-
-    for(a = 0; a < ms->FDim[0]; a += ms->FDim[0] - 1) {
-      v[0] = ms->Origin[0] + ms->Grid[0] * (a + ms->Min[0]);
-      copy3f(v, ms->Corner + 3 * d);
-      d++;
-    }
-  }
-}
-
-
-/* interpolation test code 
-
-   { 
-
-   float test[3];
-
-   float result;
-
-   float cmp;
-
-
-   for(c=0;c<ms->FDim[0]-1;c++) {
-
-   for(b=0;b<ms->FDim[1]-1;b++) {
-
-   for(a=0;a<ms->FDim[2]-1;a++) {
-
-   for(e=0;e<3;e++) {
-
-   test[e] = (F4(ms->Field->points,a,b,c,e)+
-
-   F4(ms->Field->points,a,b,c,e))/2.0;
-
-   }
-
-   ObjectMapStateInterpolate(ms,test,&result,1);
-
-   cmp = (F3(ms->Field->data,a,b,c)+
-
-   F3(ms->Field->data,a,b,c))/2.0;
-
-   if(fabs(cmp-result)>0.001) {
-
-   printf("%d %d %d\n",a,b,c);
-
-   printf("%8.5f %8.5f\n",
-
-   cmp,
-
-   result);
-
-   }
-
-   }
-
-   }
-
-   }
-
-   }
-
- */
-
-if(!ok) {
-  ErrMessage(I->Obj.G, "ObjectMap", "Error reading map");
-} else {
-  ms->Active = true;
-  ObjectMapUpdateExtents(I);
-  printf(" ObjectMap: Map Read.  Range = %5.6f to %5.6f\n", mind, maxd);
-}
-
-return (ok);
-
-}
-
-mol->add_volume_data(v->origin, v->xaxis, v->yaxis, v->zaxis,
-                     v->xsize, v->ysize, v->zsize, datablock);
-
-CoordSet *cs = CoordSetCopy(cs_tmpl);
-
-/*        printf("%p\n",file_handle); */
-timestep.coords = (float *) cs->Coord;
-{
-  int cnt = 0;
-  int icnt = interval;
-  int n_avg = 0;
-  int ncnt = 0;
-
-  while(!plugin->read_next_timestep(file_handle, natoms, &timestep)) {
-    cnt++;
-
-    if(cnt >= start) {
-      icnt--;
-      if(icnt > 0) {
-        PRINTFB(G, FB_Details, FB_ObjectMolecule)
-          " ObjectMolecule: skipping set %d...\n", cnt ENDFB(G);
-      } else {
-        icnt = interval;
-        n_avg++;
-      }
-
-      if(icnt == interval) {
-        if(n_avg < average) {
-          PRINTFB(G, FB_Details, FB_ObjectMolecule)
-            " ObjectMolecule: averaging set %d...\n", cnt ENDFB(G);
-        } else {
-          /* compute average */
-          if(n_avg > 1) {
-            float *fp;
-            int i;
-            fp = cs->Coord;
-            for(i = 0; i < cs->NIndex; i++) {
-              *(fp++) /= n_avg;
-              *(fp++) /= n_avg;
-              *(fp++) /= n_avg;
-            }
-          }
-
-          /* add new coord set */
-          if(cs->fInvalidateRep)
-            cs->fInvalidateRep(cs, cRepAll, cRepInvRep);
-          if(frame < 0)
-            frame = obj->NCSet;
-
-          VLACheck(obj->CSet, CoordSet *, frame);
-          if(obj->NCSet <= frame)
-            obj->NCSet = frame + 1;
-          if(obj->CSet[frame])
-            obj->CSet[frame]->fFree(obj->CSet[frame]);
-          obj->CSet[frame] = cs;
-          ncnt++;
-
-          if(average < 2) {
-            PRINTFB(G, FB_Details, FB_ObjectMolecule)
-              " ObjectMolecule: read set %d into state %d...\n", cnt, frame + 1 ENDFB(G);
-          } else {
-            PRINTFB(G, FB_Details, FB_ObjectMolecule)
-              " ObjectMolecule: averaging set %d...\n", cnt ENDFB(G);
-            PRINTFB(G, FB_Details, FB_ObjectMolecule)
-              " ObjectMolecule: average loaded into state %d...\n", frame + 1 ENDFB(G);
-          }
-          frame++;
-          cs = CoordSetCopy(cs);        /* otherwise, we need a place to put the next set */
-          if((stop > 0) && (cnt >= stop))
-            break;
-          if((max > 0) && (ncnt >= max))
-            break;
-          timestep.coords = (float *) cs->Coord;
-          n_avg = 0;
-        }
-      }
-    } else {
-      PRINTFB(G, FB_Details, FB_ObjectMolecule)
-        " ObjectMolecule: skipping set %d...\n", cnt ENDFB(G);
-    }
-  }
-}
-
-plugin->close_file_read(file_handle);
-if(cs)
-  cs->fFree(cs);
-SceneChanged(G);
-SceneCountFrames(G);
-if(zoom_flag)
-  if(SettingGet(G, cSetting_auto_zoom)) {
-    ExecutiveWindowZoom(G, obj->Obj.Name, 0.0, -1, 0, 0, quiet);        /* auto zoom (all states) */
-  }
-}
-}
-}
-
-return obj;
-}
-#endif
 
 #endif

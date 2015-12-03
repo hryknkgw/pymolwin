@@ -14,6 +14,7 @@ I* Additional authors of this source file include:
 -*
 Z* -------------------------------------------------------------------
 */
+#include"os_python.h"
 
 #include"os_proprietary.h"
 
@@ -37,6 +38,9 @@ Z* -------------------------------------------------------------------
 #include"Seq.h"
 #include"PyMOLOptions.h"
 #include"OVContext.h"
+#include"ShaderMgr.h"
+#include"Sphere.h"
+#include"Selector.h"
 
 static void *SettingPtr(CSetting * I, int index, ov_size size);
 
@@ -196,13 +200,14 @@ int SettingUniqueGet_color(PyMOLGlobals * G, int unique_id, int setting_id, int 
   return SettingUniqueGetTypedValue(G, unique_id, setting_id, cSetting_color, value);
 }
 
-void SettingUniqueSetTypedValue(PyMOLGlobals * G, int unique_id, int setting_id,
-                                int setting_type, void *value)
+int SettingUniqueSetTypedValue(PyMOLGlobals * G, int unique_id, int setting_id,
+			       int setting_type, void *value)
 
 /* set value to NULL in order to delete setting */
 {
   register CSettingUnique *I = G->SettingUnique;
   OVreturn_word result;
+  int isset = false;
 
   if(OVreturn_IS_OK((result = OVOneToOne_GetForward(I->id2offset, unique_id)))) {       /* setting list exists for atom */
     int offset = result.word;
@@ -213,8 +218,11 @@ void SettingUniqueSetTypedValue(PyMOLGlobals * G, int unique_id, int setting_id,
       if(entry->setting_id == setting_id) {
         found = true;           /* this setting is already defined */
         if(value) {             /* if redefining value */
-          entry->value.int_ = *(int *) value;
-          entry->type = setting_type;
+	  if (entry->value.int_ != *(int *) value || entry->type != setting_type){
+	    entry->type = setting_type;
+	    entry->value.int_ = *(int *) value;
+	    isset = true;
+	  }
         } else {                /* or NULL value means delete this setting */
           if(!prev) {           /* if first entry in list */
             OVOneToOne_DelForward(I->id2offset, unique_id);
@@ -226,6 +234,7 @@ void SettingUniqueSetTypedValue(PyMOLGlobals * G, int unique_id, int setting_id,
           }
           entry->next = I->next_free;
           I->next_free = offset;
+	  isset = true;
         }
         break;
       }
@@ -247,11 +256,13 @@ void SettingUniqueSetTypedValue(PyMOLGlobals * G, int unique_id, int setting_id,
             entry->type = setting_type;
             entry->value.int_ = *(int *) value;
             entry->setting_id = setting_id;
+	    isset = true;
           } else if(OVreturn_IS_OK(OVOneToOne_Set(I->id2offset, unique_id, offset))) {
             /* create new list */
             entry->type = setting_type;
             entry->value.int_ = *(int *) value;
             entry->setting_id = setting_id;
+	    isset = true;
           }
         }
       }
@@ -269,11 +280,13 @@ void SettingUniqueSetTypedValue(PyMOLGlobals * G, int unique_id, int setting_id,
         entry->value.int_ = *(int *) value;
         entry->setting_id = setting_id;
         entry->next = 0;
+	isset = true;
       }
     }
   } else {
     /* unhandled error */
   }
+  return isset;
 }
 
 void SettingUniqueSet_i(PyMOLGlobals * G, int unique_id, int setting_id, int value)
@@ -665,6 +678,16 @@ int SettingSetSmart_i(PyMOLGlobals * G, CSetting * set1, CSetting * set2, int in
   return SettingSetGlobal_i(G, index, value);
 }
 
+void SettingConvertToColorIf3f(PyMOLGlobals * G, int index){
+  if (SettingGetType(G, index) == cSetting_float3){
+    register CSetting *I = G->Setting;
+    float fval[3];
+    SettingGetGlobal_3f(G, index, fval);
+    I->info[index].type = cSetting_color;
+    SettingSet_i(I, index, Color3fToInt(G, fval));
+  }
+}
+
 int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
 {
 #ifdef _PYMOL_NOPY
@@ -680,7 +703,6 @@ int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
 
   int stereo = SettingGetGlobal_b(G, cSetting_stereo);
   int text = SettingGetGlobal_b(G, cSetting_text);
-  int texture_fonts = SettingGetGlobal_b(G, cSetting_texture_fonts);
   int use_display_lists = SettingGetGlobal_b(G, cSetting_use_display_lists);
   int max_threads = SettingGetGlobal_i(G, cSetting_max_threads);
   int nvidia_bugs = SettingGetGlobal_b(G, cSetting_nvidia_bugs);
@@ -690,6 +712,9 @@ int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
   int show_progress = SettingGetGlobal_b(G, cSetting_show_progress);
   int defer_updates = SettingGetGlobal_b(G, cSetting_defer_updates);
   int suspend_updates = SettingGetGlobal_b(G, cSetting_suspend_updates);
+  int suspend_undo = SettingGetGlobal_b(G, cSetting_suspend_undo);
+  int suspend_undo_atom_count = SettingGetGlobal_i(G, cSetting_suspend_undo_atom_count);
+  int suspend_deferred = SettingGetGlobal_i(G, cSetting_suspend_deferred);
   int cache_max = SettingGetGlobal_i(G, cSetting_cache_max);
   int logging = SettingGetGlobal_i(G, cSetting_logging);
   float no_idle = SettingGetGlobal_f(G, cSetting_no_idle);
@@ -698,6 +723,7 @@ int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
   int mouse_grid = SettingGetGlobal_b(G, cSetting_mouse_grid);
   int mouse_z_scale = SettingGetGlobal_i(G,cSetting_mouse_scale);
   register CSetting *I = G->Setting;
+
   if(list)
     if(PyList_Check(list))
       ok = SettingFromPyList(I, list);
@@ -714,7 +740,6 @@ int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
 
   SettingSet_b(I, cSetting_stereo, stereo);
   SettingSet_b(I, cSetting_text, text);
-  SettingSet_b(I, cSetting_texture_fonts, texture_fonts);
   SettingSet_b(I, cSetting_use_display_lists, use_display_lists);
   SettingSet_i(I, cSetting_max_threads, max_threads);
   SettingSet_i(I, cSetting_nvidia_bugs, nvidia_bugs);
@@ -728,6 +753,9 @@ int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
   SettingSet_b(I, cSetting_show_progress, show_progress);
   SettingSet_b(I, cSetting_defer_updates, defer_updates);
   SettingSet_b(I, cSetting_suspend_updates, suspend_updates);
+  SettingSet_b(I, cSetting_suspend_undo, suspend_undo);
+  SettingSet_i(I, cSetting_suspend_undo_atom_count, suspend_undo_atom_count);
+  SettingSet_b(I, cSetting_suspend_deferred, suspend_deferred);
   SettingSet_b(I, cSetting_session_changed, 0);
 
   SettingSet_b(I, cSetting_mouse_grid, mouse_grid);
@@ -746,6 +774,8 @@ int SettingSetGlobalsFromPyList(PyMOLGlobals * G, PyObject * list)
   SettingSet_i(I, cSetting_max_threads, 1);
   SettingSet_b(I, cSetting_async_builds, 0);
 #endif
+
+  ColorUpdateFrontFromSettings(G);
   return (ok);
 #endif
 }
@@ -838,10 +868,36 @@ PyObject *SettingAsPyList(CSetting * I)
 
 
 /*========================================================================*/
+static int SettingCheckUseShaders(CSetting * I, int quiet)
+{
+  PyMOLGlobals * G = I->G;
+    if (SettingGetGlobal_i(G, cSetting_use_shaders)){
+      if (!CShaderMgr_ShadersPresent(G->ShaderMgr)){
+	SettingSet_b(I, cSetting_use_shaders, 0);
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Error: use_shaders cannot be set when Shaders are not available, setting use_shaders back to false\n"
+	    ENDFB(G);
+	}
+	return 1;
+      }
+      if (SettingGetGlobal_b(G, cSetting_excl_display_lists_shaders) && SettingGetGlobal_i(G, cSetting_use_display_lists)){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Details)
+	    "Setting-Details: use_shaders and use_display_lists are exclusive, turning off use_display_lists\n"
+	    ENDFB(G);
+	}
+	SettingSet_b(G->Setting, cSetting_use_display_lists, 0);
+      }
+    }
+    return 0;
+}
+
+/*========================================================================*/
 #ifndef _PYMOL_NOPY
 static int set_list(CSetting * I, PyObject * list)
 {
-  int ok = true;
+  int ok = true, set_type = true;
   int index;
   int setting_type;
   char *str;
@@ -861,6 +917,7 @@ static int set_list(CSetting * I, PyObject * list)
       case cSetting_stereo_double_pump_mono:
       case cSetting_max_threads:
       case cSetting_session_migration:
+        set_type = false;
         break;
       default:
         if(ok)
@@ -898,7 +955,7 @@ static int set_list(CSetting * I, PyObject * list)
             break;
           }
       }
-      if(ok)
+      if(ok && set_type)
         I->info[index].type = setting_type;
     }
   }
@@ -929,6 +986,15 @@ CSetting *SettingNewFromPyList(PyMOLGlobals * G, PyObject * list)
         ok = set_list(I, PyList_GetItem(list, a));
     }
   }
+  {
+    int light_count = SettingGetGlobal_i(G, cSetting_light_count);
+    if (light_count > 8){
+      PRINTFB(I->G, FB_Setting, FB_Warnings)
+	"SettingNewFromPyList-Error: light_count cannot be higher than 8, setting light_count to 8\n"
+	ENDFB(I->G);
+      SettingSet_i(I->G->Setting, cSetting_light_count, 8);
+    }
+  }
   return (I);
 #endif
 }
@@ -955,10 +1021,19 @@ int SettingFromPyList(CSetting * I, PyObject * list)
         ok = false;
     }
   }
+  {
+    int light_count = SettingGetGlobal_i(I->G, cSetting_light_count);
+    if (light_count > 8){
+      PRINTFB(I->G, FB_Setting, FB_Warnings)
+	"SettingFromPyList-Error: light_count cannot be higher than 8, setting light_count to 8\n"
+	ENDFB(I->G);
+      SettingSet_i(I->G->Setting, cSetting_light_count, 8);
+    }
+    SettingCheckUseShaders(I, 0);
+  }
   return (ok);
 #endif
 }
-
 
 /*========================================================================*/
 #ifndef _PYMOL_NOPY
@@ -1118,7 +1193,8 @@ int SettingStringToTypedValue(PyMOLGlobals * G, int index, char *st, int *type,
                               int *value)
 {
   int ok = true;
-
+  int newvalue ;
+  float newfvalue;
   /* this data structure has been pre-checked at the python level... */
 
   *type = SettingGetType(G, index);
@@ -1126,25 +1202,45 @@ int SettingStringToTypedValue(PyMOLGlobals * G, int index, char *st, int *type,
   switch (*type) {
   case cSetting_boolean:
     if((!*st) || (*st == '0') || (*st == 'F') || WordMatchExact(G, st, "on", true)
-       || WordMatchExact(G, st, "false", true))
-      *value = 0;
-    else
-      *value = 1;
+       || WordMatchExact(G, st, "false", true)){
+          newvalue = 0;
+      } else {
+          newvalue = 1;
+      }
+      if (newvalue != *value){
+          *value = newvalue;
+      } else {
+          ok = false;
+      }
     break;
   case cSetting_int:
-    if(sscanf(st, "%d", value) != 1)
-      ok = false;
+    if(sscanf(st, "%d", &newvalue) != 1){
+        ok = false;
+    } else if (newvalue!=*value){
+        *value = newvalue;
+    } else {
+        ok = false;
+    }
     break;
   case cSetting_float:
-    if(sscanf(st, "%f", (float *) value) != 1)
-      ok = false;
+    if(sscanf(st, "%f", &newfvalue) != 1){
+        ok = false;
+    } else if (newfvalue != *((float *) value)){
+        *(float*)value = newfvalue;
+    } else {
+        ok = false;
+    }
     break;
   case cSetting_color:
     {
       int color_index = ColorGetIndex(G, st);
       if((color_index < 0) && (color_index > cColorExtCutoff))
         color_index = 0;
-      *(value) = color_index;
+      if (*(value) != color_index){
+          *(value) = color_index;
+      } else {
+          ok = false;
+      }
     }
     break;
   default:
@@ -1216,6 +1312,48 @@ int SettingSetFromString(PyMOLGlobals * G, CSetting * I, int index, char *st)
 
 /*========================================================================*/
 #ifndef _PYMOL_NOPY
+PyObject *SettingGetPyObject(PyMOLGlobals * G, CSetting * set1, CSetting * set2, int index)
+{                               /* assumes blocked python interpeter */
+  PyObject *result = NULL;
+  float *ptr;
+  int type = SettingGetType(G, index);
+
+  switch (type) {
+  case cSetting_boolean:
+    result = SettingGet_b(G, set1, set2, index) ? Py_True : Py_False ;
+    break;
+  case cSetting_int:
+    result = Py_BuildValue("i", SettingGet_i(G, set1, set2, index));
+    break;
+  case cSetting_float:
+    result = Py_BuildValue("f", SettingGet_f(G, set1, set2, index));
+    break;
+  case cSetting_float3:
+    ptr = SettingGet_3fv(G, set1, set2, index);
+    result = Py_BuildValue("(fff)", ptr[0], ptr[1], ptr[2]);
+    break;
+  case cSetting_color:
+    {
+      int retcol = SettingGet_color(G, set1, set2, index);
+      if (retcol > 0){
+	float *col;
+	col = ColorGet(G, retcol);
+	result = Py_BuildValue("(fff)", col[0], col[1], col[2]);
+      } else {
+	result = PConvAutoNone(Py_None);
+      }
+    }
+    break;
+  case cSetting_string:
+    result = Py_BuildValue("s", SettingGet_s(G, set1, set2, index));
+    break;
+  default:
+    result = PConvAutoNone(Py_None);
+    break;
+  }
+  return result;
+}
+
 PyObject *SettingGetTuple(PyMOLGlobals * G, CSetting * set1, CSetting * set2, int index)
 {                               /* assumes blocked python interpeter */
   PyObject *result = NULL;
@@ -1383,6 +1521,9 @@ int SettingUnset(CSetting * I, int index)
 {
   if(I) {
     SettingRec *sr = I->info + index;
+    if (!sr->defined && sr->changed){
+      return false;
+    }
     sr->defined = false;
     sr->changed = true;
   }
@@ -1578,6 +1719,14 @@ int SettingSet_i(CSetting * I, int index, int value)
 
 
 /*========================================================================*/
+int SettingSet_color_from_3f(CSetting * I, int index, float *vals)
+{
+  int color_index;
+  clamp3f(vals);
+  color_index = Color3fToInt(I->G, vals);
+  return SettingSet_i(I, index, color_index);
+}
+
 int SettingSet_color(CSetting * I, int index, char *value)
 {
   int ok = true;
@@ -1590,11 +1739,20 @@ int SettingSet_color(CSetting * I, int index, char *value)
                                strcmp(value, "-3") &&
                                strcmp(value, "-4") &&
                                strcmp(value, "-5") && strcmp(value, "default"))) {
-      PRINTFB(G, FB_Setting, FB_Errors)
-        "Setting-Error: unknown color '%s'\n", value ENDFB(G);
-      ok = false;
-
-    } else {
+      float vals[3];
+      ok = ParseFloat3List(value, vals);
+      if (ok){
+	clamp3f(vals);
+	color_index = cColor_TRGB_Bits | 
+	  ((int) (255 * vals[0] + 0.49999F)) << 16 | 
+	  ((int) (255 * vals[1] + 0.49999F)) << 8 | 
+	  ((int) (255 * vals[2] + 0.49999F));
+      } else {
+	PRINTFB(G, FB_Setting, FB_Errors)
+	  "Setting-Error: unknown color '%s'\n", value ENDFB(G);
+      }
+    }
+    if (ok){
       VLACheck(I->info, SettingRec, index);
       {
 	int setting_type = I->info[index].type;
@@ -1800,7 +1958,7 @@ int SettingGet_b(PyMOLGlobals * G, CSetting * set1, CSetting * set2, int index)
       return (get_b(set2, index));
     }
   }
-  return (SettingGetGlobal_i(G, index));
+  return (SettingGetGlobal_b(G, index));
 }
 
 
@@ -1918,7 +2076,7 @@ int SettingGet_color(PyMOLGlobals * G, CSetting * set1, CSetting * set2, int ind
       return (get_color(set2, index));
     }
   }
-  return (SettingGetGlobal_i(G, index));
+  return (SettingGetGlobal_color(G, index));
 }
 
 
@@ -2002,7 +2160,8 @@ float *SettingGet_3fv(PyMOLGlobals * G, CSetting * set1, CSetting * set2, int in
 int SettingGetIndex(PyMOLGlobals * G, char *name)
 {                               /* can be called from any thread state */
 #ifdef _PYMOL_NOPY
-  /* we're going to need a C-based dictionary and settings name list for this situation */
+  /* we're going to need a C-based dictionary and settings name list for this situation,
+     should be done in PyMOL.c */
   return 0;
 #else
   PyObject *tmp;
@@ -2052,7 +2211,7 @@ int SettingGetName(PyMOLGlobals * G, int index, SettingName name)
 
 
 /*========================================================================*/
-void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int state)
+void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int state, int quiet)
 {
   char all[] = "all";
   char *inv_sele;
@@ -2063,15 +2222,19 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   } else {
     inv_sele = sele;
   }
+
   switch (index) {
   case cSetting_stereo:
     SceneUpdateStereo(G);
+    CShaderMgr_Set_Reload_Bits(G, RELOAD_ALL_SHADERS);
     break;
   case cSetting_pickable:
     ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvAll);
     SceneChanged(G);
     break;
   case cSetting_grid_mode:
+    if (!SettingGetGlobal_i(G, cSetting_grid_mode))
+      ShaderMgrResetUniformSet(G);
   case cSetting_grid_slot:
     ExecutiveInvalidateGroups(G, false);
     SceneChanged(G);
@@ -2107,18 +2270,41 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
     SeqChanged(G);
     break;
   case cSetting_seq_view_location:
+    PParse(G, "cmd.viewport(-1,-1)");
+    SeqChanged(G);
+    break;
   case cSetting_seq_view_overlay:
     PParse(G, "cmd.viewport(-1,-1)");
     break;
   case cSetting_stereo_mode:
+    CShaderMgr_Set_Reload_Bits(G, RELOAD_ALL_SHADERS);
+  case cSetting_anaglyph_mode:
+    {
+      int a_mode = SettingGetGlobal_i(G, cSetting_anaglyph_mode);
+      int ANAGLYPH_MIN = 0, ANAGLYPH_MAX = 4;
+      if((a_mode<ANAGLYPH_MIN) || (a_mode>ANAGLYPH_MAX)) {
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: anaglyph_mode range = [%d,%d]; setting to %d.", ANAGLYPH_MIN, ANAGLYPH_MAX, 4
+	    ENDFB(G);
+	}
+	SettingSet_i(G->Setting, cSetting_anaglyph_mode, 4);
+      }	
     SceneUpdateStereoMode(G);
+    PyMOL_NeedRedisplay(G->PyMOL);
     break;
-  case cSetting_dot_lighting:
-  case cSetting_mesh_lighting:
+    }
+  case cSetting_light_count:
+    CShaderMgr_Set_Reload_Bits(G, RELOAD_SHADERS_FOR_LIGHTING);
   case cSetting_light:
   case cSetting_light2:
   case cSetting_light3:
-  case cSetting_light_count:
+  case cSetting_light4:
+  case cSetting_light5:
+  case cSetting_light6:
+  case cSetting_light7:
+  case cSetting_dot_lighting:
+  case cSetting_mesh_lighting:
   case cSetting_fog:
   case cSetting_field_of_view:
   case cSetting_fog_start:
@@ -2127,23 +2313,128 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_transparency_global_sort:
   case cSetting_dot_normals:
   case cSetting_mesh_normals:
-  case cSetting_use_shaders:
     SceneInvalidate(G);
+    break;
+  case cSetting_spec_power:
+    if (!quiet){
+      PRINTFB(G, FB_Setting, FB_Debugging)
+	"Setting-Details: spec_power is depreciated in PyMOL 1.5.  This option will not work in future versions. Please set shininess to set the specular exponent for movable light sources.\n"
+	ENDFB(G);
+    }
+    SceneInvalidate(G);
+    break;
+  case cSetting_spec_count:
+  case cSetting_shininess:
+  case cSetting_spec_reflect:
+  case cSetting_spec_direct:
+  case cSetting_spec_direct_power:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders) || SettingGetGlobal_i(G, cSetting_sphere_mode) == 9){
+      SceneInvalidate(G);
+    }
+    break;
+  case cSetting_use_display_lists:
+    {
+      if (SettingGetGlobal_b(G, cSetting_excl_display_lists_shaders) && SettingGetGlobal_i(G, cSetting_use_display_lists) && SettingGetGlobal_b(G, cSetting_use_shaders)){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Details)
+	    "Setting-Details: use_shaders and use_display_lists are exclusive, turning off use_shaders\n"
+	    ENDFB(G);
+	}
+	SettingSet_b(G->Setting, cSetting_use_shaders, 0);
+      }
+    }
+  case cSetting_use_shaders:
+    {
+      short changed = 0;
+      if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+	if (SettingCheckUseShaders(G->Setting, quiet)){
+	  return;
+	}
+      }
+      SceneInvalidate(G);
+      if (SettingGetGlobal_b(G, cSetting_ribbon_use_shader)){
+	ExecutiveInvalidateRep(G, inv_sele, cRepRibbon, cRepInvRep);
+	changed = 1;
+      }
+      if (SettingGetGlobal_b(G, cSetting_nonbonded_use_shader)){
+	ExecutiveInvalidateRep(G, inv_sele, cRepNonbonded, cRepInvRep);
+	changed = 1;
+      }
+      if (SettingGetGlobal_i(G, cSetting_nb_spheres_use_shader)){
+	changed = 1;
+      }
+      if (SettingGetGlobal_b(G, cSetting_dash_use_shader)){
+	ExecutiveInvalidateRep(G, inv_sele, cRepAngle, cRepInvRep);
+	ExecutiveInvalidateRep(G, inv_sele, cRepDihedral, cRepInvRep);
+	ExecutiveInvalidateRep(G, inv_sele, cRepDash, cRepInvRep);
+	changed = 1;
+      }
+      if (SettingGetGlobal_b(G, cSetting_line_use_shader)){
+	ExecutiveInvalidateRep(G, inv_sele, cRepLine, cRepInvRep);
+	changed = 1;
+      }
+      if (SettingGetGlobal_b(G, cSetting_cartoon_use_shader)){
+	ExecutiveInvalidateRep(G, inv_sele, cRepCartoon, cRepInvRep);
+	changed = 1;
+      }
+      if (SettingGetGlobal_b(G, cSetting_cgo_use_shader) ||
+          SettingGetGlobal_b(G, cSetting_stick_as_cylinders)){
+	ExecutiveInvalidateRep(G, inv_sele, cRepCGO, cRepInvRep);
+	changed = 1;
+      }
+      if (SettingGetGlobal_b(G, cSetting_stick_use_shader) ||
+          SettingGetGlobal_b(G, cSetting_stick_as_cylinders) ||
+	  (SettingGetGlobal_b(G, cSetting_stick_ball) && 
+	   SettingGetGlobal_b(G, cSetting_valence))){
+	ExecutiveInvalidateRep(G, inv_sele, cRepCyl, cRepInvRep);
+	changed = 1;
+      }
+
+      if (SettingGetGlobal_b(G, cSetting_surface_use_shader) ||
+	  SettingGetGlobal_b(G, cSetting_dot_use_shader) || 
+	  SettingGetGlobal_b(G, cSetting_mesh_use_shader)){
+	changed = 1;
+      }
+      if (changed){
+	SceneChanged(G);
+	SceneUpdateObjectMoleculesSingleThread(G);
+      }
+    }
     break;
   case cSetting_stereo_shift:
   case cSetting_stereo_angle:
   case cSetting_stereo_dynamic_strength:
-  case cSetting_texture_fonts:
     SceneInvalidate(G);
+    break;
+  case cSetting_texture_fonts:
+    if (!quiet){
+      PRINTFB(G, FB_Setting, FB_Warnings)
+	"Setting-Warning: texture_fonts is deprecated, it is no longer needed."
+	ENDFB(G);
+    }
     break;
   case cSetting_scene_buttons:
   case cSetting_scene_buttons_mode:
     SceneInvalidate(G);
+    OrthoInvalidateDoDraw(G);
     break;
   case cSetting_dash_round_ends:
   case cSetting_dash_color:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders) && SettingGetGlobal_b(G, cSetting_dash_use_shader)){
+      ExecutiveInvalidateRep(G, "all", cRepDash, cRepInvRep);
+    }
+    SceneInvalidate(G);
+    break;
   case cSetting_angle_color:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders) && SettingGetGlobal_b(G, cSetting_dash_use_shader)){
+      ExecutiveInvalidateRep(G, "all", cRepAngle, cRepInvRep);
+    }
+    SceneInvalidate(G);
+    break;
   case cSetting_dihedral_color:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders) && SettingGetGlobal_b(G, cSetting_dash_use_shader)){
+      ExecutiveInvalidateRep(G, "all", cRepDihedral, cRepInvRep);
+    }
     SceneInvalidate(G);
     break;
   case cSetting_mouse_selection_mode:
@@ -2188,13 +2479,115 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_valence_mode:
   case cSetting_valence_size:
   case cSetting_half_bonds:
-  case cSetting_stick_transparency:
   case cSetting_line_stick_helper:
   case cSetting_hide_long_bonds:
-  case cSetting_line_use_shader:
     ExecutiveInvalidateRep(G, inv_sele, cRepLine, cRepInvRep);
     ExecutiveInvalidateRep(G, inv_sele, cRepCyl, cRepInvRep);
     SceneChanged(G);
+    break;
+  case cSetting_stick_transparency:
+  case cSetting_stick_debug:
+  case cSetting_stick_round_nub:
+  case cSetting_stick_as_cylinders:
+  case cSetting_stick_good_geometry:
+    ExecutiveInvalidateRep(G, inv_sele, cRepCyl, cRepInvRep);
+    SceneChanged(G);
+    break;
+  case cSetting_line_use_shader:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepRibbon, cRepInvRep);
+      SceneChanged(G);
+      if (SettingGetGlobal_b(G, cSetting_line_use_shader)){
+	SceneUpdateObjectMoleculesSingleThread(G);
+      }
+    }
+    break;
+  case cSetting_ribbon_use_shader:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepRibbon, cRepInvRep);
+      SceneChanged(G);
+    }
+    break;
+  case cSetting_dot_as_spheres:
+    SceneInvalidate(G);
+    SceneChanged(G);
+    break;
+  case cSetting_dot_use_shader:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepDot, cRepInvRep);
+      SceneChanged(G);
+    }
+    break;
+  case cSetting_nonbonded_use_shader:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepNonbonded, cRepInvRep);
+      SceneChanged(G);
+    }
+    break;
+  case cSetting_nb_spheres_size:
+    ExecutiveInvalidateRep(G, inv_sele, cRepNonbondedSphere, cRepInvRep);
+    SceneChanged(G);
+    break;
+  case cSetting_nb_spheres_use_shader:
+    {
+      int nb_spheres_use_shader = SettingGetGlobal_b(G, cSetting_nb_spheres_use_shader);
+      if (nb_spheres_use_shader<0 || nb_spheres_use_shader>2){
+	if (nb_spheres_use_shader<0){
+	  nb_spheres_use_shader = 0;
+	} else {
+	  nb_spheres_use_shader = 2;
+	}
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Error: nb_spheres_use_shader can only be set to 0 (off), 1 (default shader), or 2 (sphere shader), setting to %d\n", nb_spheres_use_shader
+	    ENDFB(G);
+	}
+	SettingSet_b(G->Setting, cSetting_use_shaders, nb_spheres_use_shader);
+	return;
+	
+      }
+    }
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      SceneChanged(G);
+    }
+    break;
+  case cSetting_render_as_cylinders:
+    ExecutiveInvalidateRep(G, inv_sele, cRepCyl, cRepInvRep);
+  case cSetting_mesh_as_cylinders:
+  case cSetting_line_as_cylinders:
+  case cSetting_ribbon_as_cylinders:
+  case cSetting_dash_as_cylinders:
+  case cSetting_nonbonded_as_cylinders:
+  case cSetting_alignment_as_cylinders:
+  case cSetting_cartoon_nucleic_acid_as_cylinders:
+    if (SettingGetGlobal_b(G, cSetting_render_as_cylinders)){
+      if (!CShaderMgr_ShaderPrgExists(G->ShaderMgr, "cylinder")){
+	SettingSet_b(G->Setting, cSetting_render_as_cylinders, 0);
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Error: render_as_cylinders cannot be set when the Cylinder Shader is not available, setting render_as_cylinder back to false\n"
+	    ENDFB(G);
+	}
+	return;
+      }
+      switch (index){
+      case cSetting_render_as_cylinders:
+      case cSetting_cartoon_nucleic_acid_as_cylinders:
+      case cSetting_use_shaders:
+	if (SettingGetGlobal_b(G, cSetting_use_shaders) && SettingGetGlobal_b(G, cSetting_render_as_cylinders)){
+	  ExecutiveInvalidateRep(G, inv_sele, cRepCartoon, cRepInvRep);
+	}
+      }
+      SceneChanged(G);
+    }
+    break;
+  case cSetting_mesh_use_shader:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      SceneChanged(G);
+      if (SettingGetGlobal_b(G, cSetting_mesh_use_shader)){
+	SceneUpdateObjectMoleculesSingleThread(G);
+      }
+    }
     break;
   case cSetting_slice_height_scale:
   case cSetting_slice_height_map:
@@ -2206,6 +2599,7 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
     break;
   case cSetting_label_font_id:
   case cSetting_label_size:
+    ExecutiveInvalidateRep(G, inv_sele, cRepLabel, cRepInvRep);
     SceneChanged(G);
     break;
   case cSetting_retain_order:
@@ -2263,18 +2657,86 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
     ExecutiveInvalidateRep(G, inv_sele, cRepCartoon, cRepInvRep);       /* base width */
     SceneChanged(G);
     break;
+  case cSetting_cgo_sphere_quality:
+    {
+      int cgo_sphere_quality = SettingGetGlobal_i(G, cSetting_cgo_sphere_quality);
+      if ( cgo_sphere_quality < 0 ){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: cgo_sphere_quality needs to be equal to or greater than 0, and less than %d, setting to 0\n",
+	    (NUMBER_OF_SPHERE_LEVELS-1)
+	    ENDFB(G);
+	}
+	SettingSet_i(G->Setting, cSetting_cgo_sphere_quality, 0);
+	return ;
+      } else if (cgo_sphere_quality > NUMBER_OF_SPHERE_LEVELS-1){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: cgo_sphere_quality needs to be equal to or greater than 0, and less than %d, setting to %d\n",
+	    (NUMBER_OF_SPHERE_LEVELS-1), (NUMBER_OF_SPHERE_LEVELS-1)
+	    ENDFB(G);
+	}
+	SettingSet_i(G->Setting, cSetting_cgo_sphere_quality, (NUMBER_OF_SPHERE_LEVELS-1));
+	return ;
+      }
+  case cSetting_nb_spheres_quality:
+    {
+      int nb_spheres_quality = SettingGetGlobal_i(G, cSetting_nb_spheres_quality);
+      if ( nb_spheres_quality < 0 ){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: nb_spheres_quality needs to be equal to or greater than 0, and less than %d, setting to 0\n",
+	    (NUMBER_OF_SPHERE_LEVELS-1)
+	    ENDFB(G);
+	}
+	SettingSet_i(G->Setting, cSetting_nb_spheres_quality, 0);
+	return ;
+      } else if (nb_spheres_quality > NUMBER_OF_SPHERE_LEVELS-1){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: nb_spheres_quality needs to be equal to or greater than 0, and less than %d, setting to %d\n",
+	    (NUMBER_OF_SPHERE_LEVELS-1), (NUMBER_OF_SPHERE_LEVELS-1)
+	    ENDFB(G);
+	}
+	SettingSet_i(G->Setting, cSetting_nb_spheres_quality, (NUMBER_OF_SPHERE_LEVELS-1));
+	return ;
+      }
+      ExecutiveInvalidateRep(G, inv_sele, cRepNonbondedSphere, cRepInvRep);
+      SceneChanged(G);
+    }
+  case cSetting_cgo_debug:
+      ExecutiveInvalidateRep(G, inv_sele, cRepCGO, cRepInvRep);
+      SceneChanged(G);
+      break;
+    }
+  case cSetting_stick_quality:
+    {
+      if (SettingGetGlobal_i(G, cSetting_stick_quality) < 3){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: stick_quality needs to be at least 3, setting to 3\n"
+	    ENDFB(G);
+	}
+	SettingSet_i(G->Setting, cSetting_stick_quality, 3);
+	return ;
+      }
+    }
   case cSetting_stick_ball:
   case cSetting_stick_nub:
   case cSetting_stick_ball_ratio:
   case cSetting_stick_ball_color:
   case cSetting_stick_fixed_radius:
   case cSetting_stick_valence_scale:
-  case cSetting_stick_quality:
   case cSetting_stick_overlap:
   case cSetting_stick_color:
   case cSetting_stick_use_shader:
     ExecutiveInvalidateRep(G, inv_sele, cRepCyl, cRepInvRep);
     SceneChanged(G);
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      if (SettingGetGlobal_b(G, cSetting_stick_use_shader)){
+	SceneUpdateObjectMoleculesSingleThread(G);
+      }
+    }
     break;
   case cSetting_clamp_colors:
   case cSetting_ramp_blend_nearby_colors:
@@ -2310,6 +2772,21 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
     ExecutiveInvalidateRep(G, inv_sele, cRepNonbonded, cRepInvRep);
     SceneChanged(G);
     break;
+  case cSetting_scenes_changed:
+    {
+      int scene_buttons = SettingGetGlobal_i(G, cSetting_scene_buttons);
+      if (scene_buttons)
+	OrthoInvalidateDoDraw(G);
+    }
+    break;
+  case cSetting_button_mode_name:
+    {
+      int internal_gui_mode = SettingGetGlobal_i(G, cSetting_internal_gui_mode);
+      if (internal_gui_mode){
+	OrthoInvalidateDoDraw(G);
+      }
+    }
+      break;
   case cSetting_scene_current_name:
     SceneRestartFrameTimer(G);
     break;
@@ -2349,9 +2826,31 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_sphere_point_size:
   case cSetting_sphere_use_shader:
     ExecutiveInvalidateRep(G, inv_sele, cRepSphere, cRepInvRep);
-    SceneChanged(G);
+    SceneInvalidate(G);
     break;
   case cSetting_sphere_quality:
+    {
+      int sphere_quality = SettingGetGlobal_i(G, cSetting_sphere_quality);
+      if ( sphere_quality < 0 ){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: sphere_quality needs to be equal to or greater than 0, and less than %d, setting to 0\n",
+	    (NUMBER_OF_SPHERE_LEVELS-1)
+	    ENDFB(G);
+	}
+	SettingSet_i(G->Setting, cSetting_sphere_quality, 0);
+	return ;
+      } else if (sphere_quality > NUMBER_OF_SPHERE_LEVELS-1){
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: sphere_quality needs to be equal to or greater than 0, and less than %d, setting to %d\n",
+	    (NUMBER_OF_SPHERE_LEVELS-1), (NUMBER_OF_SPHERE_LEVELS-1)
+	    ENDFB(G);
+	}
+	SettingSet_i(G->Setting, cSetting_sphere_quality, (NUMBER_OF_SPHERE_LEVELS-1));
+	return ;
+      }
+    }
     ExecutiveInvalidateRep(G, inv_sele, cRepCyl, cRepInvRep);
     ExecutiveInvalidateRep(G, inv_sele, cRepNonbondedSphere, cRepInvRep);
     ExecutiveInvalidateRep(G, inv_sele, cRepSphere, cRepInvRep);
@@ -2367,10 +2866,32 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
     ExecutiveInvalidateRep(G, inv_sele, cRepMesh, cRepInvColor);
     SceneChanged(G);
     break;
+  case cSetting_ambient_occlusion_scale:
+    SceneChanged(G);
+    break;
+  case cSetting_ambient_occlusion_mode:
+    ExecutiveInvalidateRep(G, inv_sele, cRepSurface, cRepInvColor);
+    switch (SettingGetGlobal_i(G, cSetting_ambient_occlusion_mode) % 4){
+    case 1:
+      SettingSetGlobal_i(G, cSetting_ambient_occlusion_smooth, 10);
+      SettingSetGlobal_f(G, cSetting_ambient_occlusion_scale, 25.f);
+      break;
+    case 2:
+      SettingSetGlobal_i(G, cSetting_ambient_occlusion_smooth, 5);
+      SettingSetGlobal_f(G, cSetting_ambient_occlusion_scale, .9f);
+      break;
+    case 3:
+      SettingSetGlobal_i(G, cSetting_ambient_occlusion_smooth, 5);
+      SettingSetGlobal_f(G, cSetting_ambient_occlusion_scale, 1.1f);
+      break;
+    }
+    SceneChanged(G);
+    break;
+  case cSetting_ambient_occlusion_smooth:
   case cSetting_surface_negative_color:
   case cSetting_surface_color:
-  case cSetting_transparency:
   case cSetting_surface_ramp_above_mode:
+  case cSetting_transparency:
     ExecutiveInvalidateRep(G, inv_sele, cRepSurface, cRepInvColor);
     SceneChanged(G);
     break;
@@ -2402,13 +2923,15 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_surface_cavity_mode:   
   case cSetting_surface_cavity_radius:
   case cSetting_surface_cavity_cutoff:   
-  case cSetting_surface_use_shader:
   case cSetting_cavity_cull:
     ExecutiveInvalidateRep(G, inv_sele, cRepSurface, cRepInvRep);
     SceneChanged(G);
     break;
+  case cSetting_surface_use_shader:
+    SceneChanged(G);
+    break;
   case cSetting_surface_negative_visible:
-    ExecutiveInvalidateRep(G, inv_sele, cRepSurface, cRepInvAll);
+    ExecutiveInvalidateRep(G, inv_sele, cRepSurface, cRepInvRep);
     SceneChanged(G);
     break;
   case cSetting_mesh_negative_visible:
@@ -2512,9 +3035,50 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_cartoon_smooth_last:
   case cSetting_cartoon_smooth_cycles:
   case cSetting_cartoon_flat_cycles:
-  case cSetting_cartoon_use_shader:
     ExecutiveInvalidateRep(G, inv_sele, cRepCartoon, cRepInvRep);
     SceneChanged(G);
+    break;
+  case cSetting_cartoon_use_shader:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepCartoon, cRepInvRep);
+      SceneChanged(G);
+      if (SettingGetGlobal_b(G, cSetting_cartoon_use_shader)){
+	SceneUpdateObjectMoleculesSingleThread(G);
+      }
+    }
+    break;
+  case cSetting_cgo_use_shader:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepCGO, cRepInvRep);
+      SceneChanged(G);
+      if (SettingGetGlobal_b(G, cSetting_cgo_use_shader)){
+	SceneUpdateObjectMoleculesSingleThread(G);
+      }
+    }
+    break;
+  case cSetting_cgo_shader_ub_flags:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders) && SettingGetGlobal_b(G, cSetting_cgo_use_shader)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepSphere, cRepInvRep);
+      SceneChanged(G);
+      SceneUpdateObjectMoleculesSingleThread(G);
+    }
+    break;
+  case cSetting_cgo_shader_ub_color:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders) && SettingGetGlobal_b(G, cSetting_cgo_use_shader)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepCGO, cRepInvRep);
+      ExecutiveInvalidateRep(G, inv_sele, cRepCartoon, cRepInvRep);
+      ExecutiveInvalidateRep(G, inv_sele, cRepSphere, cRepInvRep);
+      SceneChanged(G);
+      SceneUpdateObjectMoleculesSingleThread(G);
+    }
+    break;
+  case cSetting_cgo_shader_ub_normal:
+    if (SettingGetGlobal_b(G, cSetting_use_shaders) && SettingGetGlobal_b(G, cSetting_cgo_use_shader)){
+      ExecutiveInvalidateRep(G, inv_sele, cRepCGO, cRepInvRep);
+      ExecutiveInvalidateRep(G, inv_sele, cRepCartoon, cRepInvRep);
+      SceneChanged(G);
+      SceneUpdateObjectMoleculesSingleThread(G);
+    }
     break;
   case cSetting_dot_width:
   case cSetting_dot_radius:
@@ -2527,8 +3091,20 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
     SceneChanged(G);
     break;
   case cSetting_bg_gradient:
-    ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
+    if (SettingGetGlobal_b(G, cSetting_bg_gradient)){
+      ColorUpdateFrontFromSettings(G);
+      ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
+    }
+    CShaderMgr_Set_Reload_Bits(G, RELOAD_SHADERS_UPDATE_FOR_BACKGROUND);
     SceneChanged(G);
+    break;
+  case cSetting_bg_image_mode:
+  case cSetting_bg_image_filename:
+  case cSetting_bg_image_linear:
+  case cSetting_bg_image_tilesize:
+    PRINTFB(G, FB_Setting, FB_Warnings)
+      "Setting-Warning: bg_image is not supported in open-source version of PyMOL\n"
+      ENDFB(G);
     break;
   case cSetting_bg_rgb_top:
     {
@@ -2540,9 +3116,12 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
         vv[2] = v[2] / 255.0F;
         SettingSet_3fv(G->Setting, cSetting_bg_rgb_top, vv);
       }
-      ColorUpdateFront(G, v);
+      if(SettingGetGlobal_b(G, cSetting_bg_gradient)) {
+	ColorUpdateFrontFromSettings(G);
+	ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
+	OrthoBackgroundTextureNeedsUpdate(G);
+      }
     }
-    ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
     SceneChanged(G);
     break;
   case cSetting_bg_rgb_bottom:
@@ -2555,28 +3134,33 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
         vv[2] = v[2] / 255.0F;
         SettingSet_3fv(G->Setting, cSetting_bg_rgb_bottom, vv);
       }
-      ColorUpdateFront(G, v);
+      if(SettingGetGlobal_b(G, cSetting_bg_gradient)) {
+	ColorUpdateFrontFromSettings(G);
+	ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
+	OrthoBackgroundTextureNeedsUpdate(G);
+      }
     }
-    ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
     SceneChanged(G);
     break;
   case cSetting_bg_rgb:
     {
       /* clamp this value */
-      float vv[3], *v = SettingGetfv(G, cSetting_bg_rgb);
-      if((v[0] > 1.0F) || (v[1] > 1.0F) || (v[2] > 1.0F)) {
-        vv[0] = v[0] / 255.0F;
-        vv[1] = v[1] / 255.0F;
-        vv[2] = v[2] / 255.0F;
-        SettingSet_3fv(G->Setting, cSetting_bg_rgb, vv);
+      float *v = ColorGet(G, SettingGet_color(G, NULL, NULL, cSetting_bg_rgb));
+      {
+	int bg_gradient = SettingGet_b(G, NULL, NULL, cSetting_bg_gradient);
+	if (!bg_gradient){
+	  ColorUpdateFront(G, v);
+	  ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
+	}
       }
-      ColorUpdateFront(G, v);
     }
-    ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvColor);
     SceneChanged(G);
     break;
+  case cSetting_selection_width:
+  case cSetting_selection_width_scale:
+  case cSetting_selection_width_max:
+    ExecutiveInvalidateSelectionIndicatorsCGO(G);
   case cSetting_line_smooth:
-  case cSetting_ortho:
   case cSetting_reflect:
   case cSetting_direct:
   case cSetting_ambient:
@@ -2584,9 +3168,10 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_specular:
   case cSetting_specular_intensity:
   case cSetting_cgo_line_width:
-  case cSetting_selection_width:
-  case cSetting_selection_width_scale:
-  case cSetting_selection_width_max:
+    SceneInvalidate(G);
+    break;
+  case cSetting_ortho:
+    ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvAll);
     SceneInvalidate(G);
     break;
   case cSetting_depth_cue:
@@ -2610,19 +3195,22 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
   case cSetting_mouse_grid:
   case cSetting_movie_panel_row_height:
   case cSetting_movie_panel:
-    OrthoCommandIn(G, "viewport");
+    if(!SettingGetGlobal_b(G, cSetting_suspend_updates)) {
+      OrthoCommandIn(G, "viewport");
+    }
     break;
   case cSetting_suspend_updates:
-    if(!SettingGet(G, cSetting_suspend_updates)) {
+    if(!SettingGetGlobal_b(G, cSetting_suspend_updates)) {
       SceneChanged(G);          /* force big update upon resumption */
       OrthoDirty(G);
     }
     break;
   case cSetting_security:
-    G->Security = (int) SettingGet(G, cSetting_security);
+    G->Security = SettingGetGlobal_i(G, cSetting_security);
     break;
   case cSetting_state:
   case cSetting_frame:
+    ExecutiveInvalidateSelectionIndicatorsCGO(G);
     SceneChanged(G);
     break;
   case cSetting_dynamic_width:
@@ -2660,6 +3248,10 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
     ExecutiveInvalidateRep(G, inv_sele, cRepVolume, cRepInvAll);
     SceneInvalidate(G);
     break;
+  case cSetting_cgo_transparency:
+    SceneInvalidate(G);
+    SceneChanged(G);
+    break;
   case cSetting_atom_type_format:
     {
       char *setting;
@@ -2674,10 +3266,11 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
 	  strcmp(lsetting, "sybyl") && 
 	  strcmp(lsetting, "macromodel") &&
 	  strcmp(lsetting, "mmd")){
-	printf("lsetting='%s'\n", lsetting);
-	PRINTFB(G, FB_Setting, FB_Warnings)
-	  "Setting-Warning: atom_type_format needs to be either mol2/sybyl or macromodel/mmd setting back to default mol2\n"
-	  ENDFB(G);
+	if (!quiet){
+	  PRINTFB(G, FB_Setting, FB_Warnings)
+	    "Setting-Warning: atom_type_format needs to be either mol2/sybyl or macromodel/mmd setting back to default mol2\n"
+	    ENDFB(G);
+	}
 	SettingSet_s(G->Setting, cSetting_atom_type_format, "mol2");	
       } else if (strcmp(setting, lsetting)){
 	SettingSet_s(G->Setting, cSetting_atom_type_format, lsetting);
@@ -2685,6 +3278,41 @@ void SettingGenerateSideEffects(PyMOLGlobals * G, int index, char *sele, int sta
       mfree(lsetting);
       ExecutiveInvalidateRep(G, inv_sele, cRepAll, cRepInvAll);
     }
+    break;
+  case cSetting_cylinder_shader_ff_workaround:
+    CShaderMgr_Set_Reload_Bits(G, RELOAD_SHADERS_CYLINDER);
+    SceneChanged(G);
+    break;
+  case cSetting_surface_color_smoothing:
+  case cSetting_surface_color_smoothing_threshold:
+    ExecutiveInvalidateRep(G, inv_sele, cRepSurface, cRepInvColor);    
+    SceneChanged(G);
+    break;
+  case cSetting_offscreen_rendering_for_antialiasing:
+  case cSetting_offscreen_rendering_multiplier:
+#if defined(WIN32) || defined(WIN64)
+    if(SettingGetGlobal_b(G, cSetting_offscreen_rendering_for_antialiasing)){
+      if (!quiet){
+	PRINTFB(G, FB_Setting, FB_Warnings)
+	  "Setting-Warning: offscreen_rendering_for_antialiasing is currently not supported on Windows.\n                 Please use graphics card controls to address anti-aliasing.\n"
+	  ENDFB(G);
+      }
+      SettingSet_b(G->Setting, cSetting_offscreen_rendering_for_antialiasing, 0);
+    }
+#else
+    SceneChanged(G);
+#endif
+    break;
+  case cSetting_smooth_half_bonds:
+    SceneChanged(G);
+    break;    
+  case cSetting_suspend_undo:
+    PRINTFB(G, FB_Setting, FB_Warnings)
+      "Setting-Warning: undo is not supported in open-source version of PyMOL\n"
+      ENDFB(G);
+    break;
+  case cSetting_selection_round_points:
+    ExecutiveInvalidateSelectionIndicatorsCGO(G);
     break;
   default:
     break;
@@ -2707,6 +3335,7 @@ int SettingSetfv(PyMOLGlobals * G, int index, float *v)
   case cSetting_bg_rgb:
     {
       float vv[3];
+      int bg_gradient = SettingGet_b(G, NULL, NULL, cSetting_bg_gradient);
 
       if((v[0] > 1.0F) || (v[1] > 1.0F) || (v[2] > 1.0F)) {
         vv[0] = v[0] / 255.0F;
@@ -2716,9 +3345,11 @@ int SettingSetfv(PyMOLGlobals * G, int index, float *v)
       } else {
         SettingSet_3fv(I, index, v);
       }
-      ColorUpdateFront(G, v);
+      if (!bg_gradient){
+	ColorUpdateFront(G, v);
+	ExecutiveInvalidateRep(G, "all", cRepAll, cRepInvColor);
+      }
     }
-    ExecutiveInvalidateRep(G, "all", cRepAll, cRepInvColor);
     SceneChanged(G);
     break;
   case cSetting_light:
@@ -2796,6 +3427,11 @@ int SettingSetGlobal_i(PyMOLGlobals * G, int index, int value)
   return (SettingSet_i(G->Setting, index, value));
 }
 
+/*========================================================================*/
+int SettingSetGlobal_s(PyMOLGlobals * G, int index, char *value)
+{
+  return (SettingSet_s(G->Setting, index, value));
+}
 
 /*========================================================================*/
 int SettingSetGlobal_f(PyMOLGlobals * G, int index, float value)
@@ -2893,14 +3529,7 @@ int SettingSetNamed(PyMOLGlobals * G, char *name, char *value)
 /*========================================================================*/
 float SettingGetNamed(PyMOLGlobals * G, char *name)
 {
-  return (SettingGet(G, SettingGetIndex(G, name)));
-}
-
-
-/*========================================================================*/
-float SettingGet(PyMOLGlobals * G, int index)
-{
-  return (SettingGetGlobal_f(G, index));
+  return (SettingGetGlobal_f(G, SettingGetIndex(G, name)));
 }
 
 
@@ -2965,7 +3594,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
 
     set_i(I, cSetting_sel_counter, 0);
 
-    set_3f(I, cSetting_bg_rgb, 0.0F, 0.0F, 0.0F);
+    set_color(I, cSetting_bg_rgb, "0x000000");
 
     set_f(I, cSetting_ambient, 0.14F);
 
@@ -3245,6 +3874,10 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
 
     set_b(I, cSetting_suspend_updates, 0);
 
+    set_i(I, cSetting_suspend_undo_atom_count, 1000);
+
+    set_b(I, cSetting_suspend_deferred, 0);
+
     set_b(I, cSetting_full_screen, 0);
 
     set_i(I, cSetting_surface_mode, 0); /* by flag is the default */
@@ -3346,8 +3979,6 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     } else {
       set_i(I, cSetting_stereo_mode, G->Option->stereo_mode);
     }
-
-    set_i(I, cSetting_cgo_sphere_quality, 1);
 
     set_b(I, cSetting_pdb_literal_names, 0);
 
@@ -3580,8 +4211,6 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
 
     set_f(I, cSetting_sculpt_tors_tolerance, 0.05F);
 
-    set_b(I, cSetting_stick_ball, false);
-
     set_f(I, cSetting_stick_ball_ratio, 1.0F);
 
     set_b(I, cSetting_stick_fixed_radius, false);
@@ -3635,7 +4264,6 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_f(I, cSetting_specular_intensity, 0.5F);
     set_i(I, cSetting_overlay_lines, 5);
     set_f(I, cSetting_ray_transparency_spec_cut, 0.9F);
-    set_b(I, cSetting_internal_prompt, 1);
     set_b(I, cSetting_normalize_grd_maps, 0);
 
     set_b(I, cSetting_ray_blend_colors, 0);
@@ -3648,7 +4276,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_i(I, cSetting_internal_gui_control_size, 18);
     set_b(I, cSetting_auto_dss, 1);
     set_i(I, cSetting_transparency_picking_mode, 2);    /* auto */
-    set_b(I, cSetting_virtual_trackball, 1);
+    set_i(I, cSetting_virtual_trackball, 1);
     set_i(I, cSetting_transparency_picking_mode, 2);    /* auto */
     set_i(I, cSetting_pdb_reformat_names_mode, 0);      /*
                                                            0 = no reformatting, 
@@ -3720,10 +4348,7 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_b(I, cSetting_cartoon_side_chain_helper, 0);
     set_b(I, cSetting_surface_optimize_subsets, 1);
     set_i(I, cSetting_multiplex, -1);
-    if(G->Option->multisample > 1)
-      set_b(I, cSetting_texture_fonts, 1);
-    else
-      set_b(I, cSetting_texture_fonts, 0);
+    set_b(I, cSetting_texture_fonts, 0);
     set_b(I, cSetting_pqr_workarounds, 1);
     set_b(I, cSetting_animation, 1);
     set_f(I, cSetting_animation_duration, 0.75F);
@@ -3758,7 +4383,6 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_b(I, cSetting_validate_object_names, 1);
     set_b(I, cSetting_unused_boolean_def_true, 1);
     set_b(I, cSetting_auto_show_spheres, G->Option->sphere_mode >= 0);
-    set_i(I, cSetting_sphere_mode, G->Option->sphere_mode);
     set_f(I, cSetting_sphere_point_max_size, 18.0);
     set_f(I, cSetting_sphere_point_size, 1.0);
     set_b(I, cSetting_pdb_honor_model_number, false);
@@ -3979,17 +4603,17 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_i(I, cSetting_motion_hand, 1);
     set_b(I, cSetting_pdb_ignore_conect, 0);
     set_b(I, cSetting_editor_bond_cycle_mode, 1); /* >0 -> include aromatic */
-    set_b(I, cSetting_dynamic_measures, 0);
+    set_b(I, cSetting_dynamic_measures, 1);
     set_f(I, cSetting_neighbor_cutoff, 3.5F);
     set_f(I, cSetting_heavy_neighbor_cutoff, 3.5F);
     set_f(I, cSetting_polar_neighbor_cutoff, 3.5F);
     set_f(I, cSetting_surface_residue_cutoff, 2.5F);
     set_b(I, cSetting_surface_use_shader, 1);
     set_b(I, cSetting_cartoon_use_shader, 1);
+    set_b(I, cSetting_mesh_use_shader, 1);
     set_b(I, cSetting_stick_use_shader, 1);
     set_b(I, cSetting_line_use_shader, 1);
     set_b(I, cSetting_sphere_use_shader, 1);
-    set_b(I, cSetting_use_shaders, 0);  /* disable by default until optimized shaders present; doesn't effect vol */
     set_s(I, cSetting_shader_path, "data/shaders");
     set_i(I, cSetting_volume_bit_depth, 8);
     set_color(I, cSetting_volume_color, "-1");
@@ -4007,8 +4631,9 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
     set_b(I, cSetting_autoclose_dialogs, 1);
 
     set_b(I, cSetting_bg_gradient, 0);
-    set_3f(I, cSetting_bg_rgb_top, 0.0F, 0.0F, 0.3F);
-    set_3f(I, cSetting_bg_rgb_bottom, 0.2F, 0.2F, 0.5F);
+
+    set_color(I, cSetting_bg_rgb_top, "0x00004D");
+    set_color(I, cSetting_bg_rgb_bottom, "0x333380");
 
     set_b(I, cSetting_ray_volume, 0);
     
@@ -4016,5 +4641,80 @@ void SettingInitGlobal(PyMOLGlobals * G, int alloc, int reset_gui, int use_defau
 
     set_i(I, cSetting_state_counter_mode, -1);
 
+    set_b(I, cSetting_cgo_use_shader, 1);
+
+    set_i(I, cSetting_cgo_lighting, 1);
+
+    set_b(I, cSetting_mesh_use_shader, 1);
+
+    set_i(I, cSetting_stick_debug, 0);
+    set_i(I, cSetting_cgo_debug, 0);
+    set_i(I, cSetting_stick_round_nub, 0);
+    set_i(I, cSetting_stick_good_geometry, 0);
+
+    set_b(I, cSetting_stick_as_cylinders, 1);
+    set_b(I, cSetting_ribbon_use_shader, 1);
+    set_b(I, cSetting_excl_display_lists_shaders, 1);
+    set_b(I, cSetting_dash_use_shader, 1);
+    set_b(I, cSetting_nonbonded_use_shader, 1);
+    set_b(I, cSetting_cylinders_shader_filter_faces, 1);
+    set_f(I, cSetting_nb_spheres_size, 0.25f);
+    set_i(I, cSetting_nb_spheres_quality, 1);
+    set_i(I, cSetting_nb_spheres_use_shader, 1);
+
+    set_b(I, cSetting_mesh_as_cylinders, 0);
+    set_b(I, cSetting_line_as_cylinders, 0);
+    set_b(I, cSetting_ribbon_as_cylinders, 1);
+    set_b(I, cSetting_dash_as_cylinders, 1);
+    set_b(I, cSetting_nonbonded_as_cylinders, 1);
+    set_b(I, cSetting_alignment_as_cylinders, 1);
+    set_i(I, cSetting_cartoon_nucleic_acid_as_cylinders, 1); /* 0 - none, 1 - just ladder, 2 - just strand, 3 - both ladder and strand */
+    set_b(I, cSetting_offscreen_rendering_for_antialiasing, 0);
+    set_f(I, cSetting_offscreen_rendering_multiplier, 4.f);
+    set_b(I, cSetting_cylinder_shader_ff_workaround, 1);
+    set_i(I, cSetting_surface_color_smoothing, 1);
+    set_f(I, cSetting_surface_color_smoothing_threshold, 0.05f);
+    set_b(I, cSetting_dot_use_shader, 1);
+    set_b(I, cSetting_dot_as_spheres, 0);
+    set_i(I, cSetting_ambient_occlusion_mode, 0);
+    set_f(I, cSetting_ambient_occlusion_scale, 25.f);
+    set_i(I, cSetting_ambient_occlusion_smooth, 10);
+    set_b(I, cSetting_smooth_half_bonds, 1);
+
+    set_i(I, cSetting_anaglyph_mode, 4); /* 0 = true; 1 = gray; 2 = color; 3 = half color; 4 = optimized */
+    set_i(I, cSetting_edit_light, 1); /* 0=ambient, default to 1 */
+
+    set_b(I, cSetting_pick_surface, 0);
+    set_s(I, cSetting_bg_image_filename, "");
+    set_i(I, cSetting_bg_image_mode, 0);
+    set_3f(I, cSetting_bg_image_tilesize, 100.F, 100.F, 0.F);
+    set_b(I, cSetting_bg_image_linear, 1);
+
+    set_b(I, cSetting_suspend_undo, 0);
+    set_b(I, cSetting_internal_prompt, 1);
+    set_i(I, cSetting_internal_feedback, G->Option->internal_feedback);
+    if(reset_gui) {
+      set_i(I, cSetting_internal_gui_width, cOrthoRightSceneMargin);
+      set_b(I, cSetting_internal_gui, 1);
+    }
+    set_b(I, cSetting_render_as_cylinders, 1);
+#ifdef _PYMOL_LIB
+    set_b(I, cSetting_use_shaders, 1);
+    set_b(I, cSetting_stick_ball, true);
+    set_b(I, cSetting_cgo_shader_ub_color, 1);
+    set_b(I, cSetting_cgo_shader_ub_normal, 1);
+    set_b(I, cSetting_cgo_shader_ub_flags, 1);
+    set_i(I, cSetting_cgo_sphere_quality, 2);
+    set_i(I, cSetting_sphere_mode, 9);
+#else
+    set_b(I, cSetting_use_shaders, 0);
+    set_b(I, cSetting_stick_ball, false);
+    set_b(I, cSetting_cgo_shader_ub_color, 0);
+    set_b(I, cSetting_cgo_shader_ub_normal, 0);
+    set_b(I, cSetting_cgo_shader_ub_flags, 0);
+    set_i(I, cSetting_cgo_sphere_quality, 1);
+    set_i(I, cSetting_sphere_mode, 9);
+#endif
   }
+  CShaderMgr_Set_Reload_Bits(G, RELOAD_ALL_SHADERS);
 }
